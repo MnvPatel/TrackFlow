@@ -63,3 +63,34 @@ export const loginWithPassword = async (req: Request, res: Response) => {
 
   res.json({ token, role: user.role });
 };
+
+//EMPLOYEE — REQUEST PASSWORD SETUP OTP
+export const requestPasswordSetupOTP = async (req: Request, res: Response) => {
+  const { email } = req.body;
+
+  const user = await prisma.user.findUnique({ where: { email } });
+  if (!user || user.role !== "EMPLOYEE")
+    return res.status(400).json({ message: "Invalid request" });
+
+  const otp = await sendOTP(`pwdsetup:${email}`);
+  console.log("OTP:", otp);
+
+  res.json({ message: "OTP sent" });
+};
+
+//EMPLOYEE — VERIFY OTP + SET PASSWORD
+export const verifyPasswordSetup = async (req: Request, res: Response) => {
+  const { email, otp, newPassword } = req.body;
+
+  const valid = await verifyOTP(`pwdsetup:${email}`, otp);
+  if (!valid) return res.status(400).json({ message: "Invalid OTP" });
+
+  const hashed = await bcrypt.hash(newPassword, 10);
+
+  await prisma.user.update({
+    where: { email },
+    data: { passwordHash: hashed, isVerified: true },
+  });
+
+  res.json({ message: "Password set successfully" });
+};
