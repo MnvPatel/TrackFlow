@@ -67,6 +67,7 @@ model User {
   role         Role
   avatarUrl    String?
   isActive     Boolean  @default(true)
+  isVerified   Boolean  @default(false)
   createdAt    DateTime @default(now())
 
   createdProjects Project[] @relation("CreatedProjects")
