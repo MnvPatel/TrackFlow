@@ -44,3 +44,22 @@ export const verifyClientOTP = async (req: Request, res: Response) => {
 
   res.json({ message: "Account verified successfully" });
 };
+
+//LOGIN WITH PASSWORD (ALL ROLES)
+export const loginWithPassword = async (req: Request, res: Response) => {
+  const { email, password } = req.body;
+
+  const user = await prisma.user.findUnique({ where: { email } });
+  if (!user || !user.passwordHash)
+    return res.status(400).json({ message: "Invalid credentials" });
+
+  if (!user.isVerified)
+    return res.status(403).json({ message: "Account not verified" });
+
+  const match = await bcrypt.compare(password, user.passwordHash);
+  if (!match) return res.status(400).json({ message: "Invalid credentials" });
+
+  const token = signToken({ id: user.id, role: user.role });
+
+  res.json({ token, role: user.role });
+};
