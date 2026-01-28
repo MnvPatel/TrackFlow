@@ -2,7 +2,8 @@ import { Request, Response } from "express";
 import bcrypt from "bcrypt";
 import prisma from "../prisma";
 import { sendOTP, verifyOTP } from "../services/otp.service";
-import { signToken } from "../utils/jwt";
+import { signAccessToken, signRefreshToken } from "../utils/jwt";
+import jwt from "jsonwebtoken";
 
 //CLIENT REGISTRATION
 export const registerClient = async (req: Request, res: Response) => {
@@ -59,10 +60,44 @@ export const loginWithPassword = async (req: Request, res: Response) => {
   const match = await bcrypt.compare(password, user.passwordHash);
   if (!match) return res.status(400).json({ message: "Invalid credentials" });
 
-  const token = signToken({ id: user.id, role: user.role });
+  const accessToken = signAccessToken({ id: user.id, role: user.role });
 
-  res.json({ token, role: user.role });
+  const refreshToken = signRefreshToken({
+    id: user.id,
+    tokenVersion: user.refreshTokenVersion,
+  });
+
+  res.cookie("refreshToken", refreshToken, {
+  httpOnly: true,
+  secure: true,
+  sameSite: "strict",
+  path: "/auth/refresh",
+});
+
+
+  res.json({ accessToken, role: user.role });
 };
+
+//REFRESH TOKEN API
+export const refreshAccessToken = async (req: Request, res: Response) => {
+  const token = req.cookies.refreshToken;
+  if (!token) return res.sendStatus(401);
+
+  try {
+    const payload: any = jwt.verify(token, process.env.JWT_REFRESH_SECRET!);
+
+    const user = await prisma.user.findUnique({ where: { id: payload.id } });
+    if (!user || user.refreshTokenVersion !== payload.tokenVersion)
+      return res.sendStatus(401);
+
+    const accessToken = signAccessToken({ id: user.id, role: user.role });
+
+    res.json({ accessToken });
+  } catch {
+    res.sendStatus(401);
+  }
+};
+
 
 //EMPLOYEE — REQUEST PASSWORD SETUP OTP
 export const requestPasswordSetupOTP = async (req: Request, res: Response) => {

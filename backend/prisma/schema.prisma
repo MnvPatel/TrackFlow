@@ -69,7 +69,7 @@ model User {
   isActive     Boolean  @default(true)
   isVerified   Boolean  @default(false)
   createdAt    DateTime @default(now())
-
+  refreshTokenVersion Int @default(0)
   createdProjects Project[] @relation("CreatedProjects")
   clientProjects  Project[] @relation("ClientProjects")
 
