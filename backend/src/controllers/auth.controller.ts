@@ -24,9 +24,7 @@ export const registerClient = async (req: Request, res: Response) => {
     },
   });
 
-  const otp = await sendOTP(`verify:${email}`);
-
-  console.log("OTP:", otp); // replace with email service
+  await sendOTP(`verify:${email}`, email, "Verify Your Email");
 
   res.json({ message: "OTP sent to email" });
 };
@@ -107,8 +105,7 @@ export const requestPasswordSetupOTP = async (req: Request, res: Response) => {
   if (!user || user.role !== "EMPLOYEE")
     return res.status(400).json({ message: "Invalid request" });
 
-  const otp = await sendOTP(`pwdsetup:${email}`);
-  console.log("OTP:", otp);
+  await sendOTP(`pwdsetup:${email}`, email, "Set Your Password");
 
   res.json({ message: "OTP sent" });
 };
@@ -128,4 +125,18 @@ export const verifyPasswordSetup = async (req: Request, res: Response) => {
   });
 
   res.json({ message: "Password set successfully" });
+};
+
+//LOGOUT
+export const logout = async (req: any, res: Response) => {
+  await prisma.user.update({
+    where: { id: req.user.id },
+    data: {
+      refreshTokenVersion: { increment: 1 },
+    },
+  });
+
+  res.clearCookie("refreshToken", { path: "/api/auth/refresh" });
+
+  res.json({ message: "Logged out successfully" });
 };

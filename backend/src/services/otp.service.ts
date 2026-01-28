@@ -1,16 +1,26 @@
 import { redis } from "../config/redis";
 import { generateOTP } from "../utils/otp";
 import { hashValue, compareHash } from "../utils/hash";
+import { sendMail } from "./mail.service";
+import { otpTemplate } from "../templates/otpMail";
 
 const OTP_TTL = 300; // 5 min
 
-export const sendOTP = async (key: string) => {
+export const sendOTP = async (
+  key: string,
+  email: string,
+  purpose: string
+) => {
   const otp = generateOTP();
   const hash = await hashValue(otp);
 
   await redis.set(key, hash, "EX", OTP_TTL);
 
-  return otp; // send via email in real app
+  await sendMail(
+    email,
+    "Your OTP Code",
+    otpTemplate(otp, purpose)
+  );
 };
 
 export const verifyOTP = async (key: string, otp: string) => {
