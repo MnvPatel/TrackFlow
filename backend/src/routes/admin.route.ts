@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { createEmployee } from "../controllers/admin.controller";
-import { auth } from "../middleware/auth.middleware";
+import { auth } from "../middlewares/auth.middleware";
 
 const router = Router();
 
