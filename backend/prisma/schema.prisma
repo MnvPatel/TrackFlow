@@ -5,8 +5,7 @@
 // Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
 
 generator client {
-  provider = "prisma-client"
-  output   = "../src/generated/prisma"
+  provider = "prisma-client-js"
 }
 
 datasource db {
@@ -63,7 +62,7 @@ model User {
   id           String   @id @default(uuid())
   name         String
   email        String   @unique
-  passwordHash String
+  passwordHash String?
   role         Role
   avatarUrl    String?
   isActive     Boolean  @default(true)
@@ -86,7 +85,7 @@ model User {
 model Project {
   id              String        @id @default(uuid())
   title           String
-  description     String
+  description     String?
   status          ProjectStatus @default(ACTIVE)
   percentCompleted Int          @default(0)
 
