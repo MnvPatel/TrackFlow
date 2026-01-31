@@ -1,5 +1,6 @@
 import { Request, Response } from "express";
 import prisma from "../prisma";
+import { ProjectStatus } from "@prisma/client";
 
 //ADMIN CREATE PROJECT
 
@@ -150,3 +151,23 @@ export const getProjects = async (req: any, res: Response) => {
 
 
 
+//ADMIN: Update Project Status
+
+export const updateProjectStatus = async (req: Request, res: Response) => {
+  const projectId = req.params.projectId as string;
+  const { status } = req.body;
+
+  if (!Object.values(ProjectStatus).includes(status)) {
+    return res.status(400).json({ message: "Invalid project status" });
+  }
+
+  const project = await prisma.project.update({
+    where: { id: projectId },
+    data: { status },
+  });
+
+  res.json({
+    message: "Project status updated",
+    project,
+  });
+};
