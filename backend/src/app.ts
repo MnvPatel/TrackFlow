@@ -3,6 +3,7 @@ import cookieParser from "cookie-parser";
 import authRoutes from "./routes/auth.route";
 import adminRoutes from "./routes/admin.route";
 import projectRoutes from "./routes/project.route";
+import taskRoutes from "./routes/task.route";
 
 export const app = express();
 
@@ -12,6 +13,7 @@ app.use(cookieParser());
 app.use("/api/auth", authRoutes);
 app.use("/api/admin", adminRoutes);
 app.use("/api/projects", projectRoutes);
+app.use("/api/tasks", taskRoutes);
 
 //GLOBAL ERROR HANDLER 
 app.use((err: any, req: any, res: any, next: any) => {

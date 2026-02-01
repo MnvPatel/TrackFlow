@@ -120,7 +120,7 @@ model ProjectMember {
 model Task {
   id              String     @id @default(uuid())
   title           String
-  description     String
+  description     String?
   priority        Priority
   status          TaskStatus @default(PENDING)
   percentCompleted Int       @default(0)
