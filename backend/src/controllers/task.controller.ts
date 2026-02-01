@@ -75,3 +75,65 @@ export const createTask = async (req: any, res: Response) => {
     res.status(500).json({ message: "Failed to create task" });
   }
 };
+
+//GET TASKS - ROLE BASED
+export const getTasks = async (req: any, res: Response) => {
+  const { id, role } = req.user;
+
+  let tasks;
+
+  if (role === "ADMIN") {
+    tasks = await prisma.task.findMany();
+  }
+
+  if (role === "EMPLOYEE") {
+    tasks = await prisma.task.findMany({
+      where: {
+        assignments: {
+          some: { userId: id },
+        },
+      },
+    });
+  }
+
+  if (role === "CLIENT") {
+    tasks = await prisma.task.findMany({
+      where: {
+        project: {
+          clientId: id,
+        },
+      },
+    });
+  }
+
+  res.json(tasks);
+};
+
+//GET TASK BY ID
+export const getTaskById = async (req: any, res: Response) => {
+  const { taskId } = req.params;
+  const { id, role } = req.user;
+
+  const task = await prisma.task.findUnique({
+    where: { id: taskId },
+    include: {
+      assignments: true,
+      project: true,
+    },
+  });
+
+  if (!task) return res.status(404).json({ message: "Task not found" });
+
+  if (
+    role === "EMPLOYEE" &&
+    !task.assignments.some((a) => a.userId === id)
+  ) {
+    return res.sendStatus(403);
+  }
+
+  if (role === "CLIENT" && task.project.clientId !== id) {
+    return res.sendStatus(403);
+  }
+
+  res.json(task);
+};
