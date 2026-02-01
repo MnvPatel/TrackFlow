@@ -1,5 +1,6 @@
 import { Request, Response } from "express";
 import prisma from "../prisma";
+import { TaskStatus } from "@prisma/client";
 
 interface CreateTaskBody {
   title: string;
@@ -136,4 +137,24 @@ export const getTaskById = async (req: any, res: Response) => {
   }
 
   res.json(task);
+};
+
+//ADMIN: Update Task Status
+export const updateTaskStatus = async (req: Request, res: Response) => {
+  const taskId = req.params.taskId as string;
+  const { status } = req.body;
+
+  if (!Object.values(TaskStatus).includes(status)) {
+    return res.status(400).json({ message: "Invalid task status" });
+  }
+
+  const task = await prisma.task.update({
+    where: { id: taskId },
+    data: { status },
+  });
+
+  res.json({
+    message: "Task status updated",
+    task,
+  });
 };
