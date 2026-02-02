@@ -158,3 +158,59 @@ export const updateTaskStatus = async (req: Request, res: Response) => {
     task,
   });
 };
+
+//EDIT TASK
+const allowedTransitions: Record<string, string[]> = {
+  PENDING: ["IN_PROGRESS"],
+  IN_PROGRESS: ["SUBMITTED"],
+  SUBMITTED: ["APPROVED", "REJECTED"],
+  REJECTED: ["IN_PROGRESS"],
+  APPROVED: [],
+};
+
+export const editTask = async (req: Request, res: Response) => {
+  const taskId = req.params.taskId as string;
+  const { title, description, priority, deadline, status } = req.body;
+
+  const task = await prisma.task.findUnique({
+    where: { id: taskId },
+  });
+
+  if (!task) {
+    return res.status(404).json({ message: "Task not found" });
+  }
+
+  //Cannot edit approved task
+  if (task.status === "APPROVED") {
+    return res.status(400).json({
+      message: "Approved task cannot be edited",
+    });
+  }
+
+  //Validate enum
+  if (status && !Object.values(TaskStatus).includes(status)) {
+    return res.status(400).json({
+      message: "Invalid task status",
+    });
+  }
+
+  //Validate transition
+  if (status && !allowedTransitions[task.status].includes(status)) {
+    return res.status(400).json({
+      message: `Cannot change task status from ${task.status} to ${status}`,
+    });
+  }
+
+  const updated = await prisma.task.update({
+    where: { id: taskId },
+    data: {
+      title,
+      description,
+      priority,
+      deadline,
+      status,
+    },
+  });
+
+  res.json(updated);
+};

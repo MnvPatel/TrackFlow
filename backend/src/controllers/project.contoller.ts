@@ -201,3 +201,44 @@ export const updateProjectStatus = async (req: Request, res: Response) => {
     project,
   });
 };
+
+//EDIT PROJECT
+export const editProject = async (req: Request, res: Response) => {
+  const projectId = req.params.projectId as string;
+  const { title, description, startDate, endDate, status } = req.body;
+
+  const project = await prisma.project.findUnique({
+    where: { id: projectId },
+  });
+
+  if (!project) {
+    return res.status(404).json({ message: "Project not found" });
+  }
+
+  //Cannot edit completed project
+  if (project.status === "COMPLETED") {
+    return res.status(400).json({
+      message: "Completed project cannot be edited",
+    });
+  }
+
+  //Validate status enum
+  if (status && !Object.values(ProjectStatus).includes(status)) {
+    return res.status(400).json({
+      message: "Invalid project status",
+    });
+  }
+
+  const updated = await prisma.project.update({
+    where: { id: projectId },
+    data: {
+      title,
+      description,
+      startDate,
+      endDate,
+      status,
+    },
+  });
+
+  res.json(updated);
+};
