@@ -113,38 +113,52 @@ export const createProject = async (req: any, res: Response) => {
   }
 };
 
-
 //GET PROJECTS - ROLE BASED
 export const getProjects = async (req: any, res: Response) => {
   const { id, role } = req.user;
 
-  let projects;
+  let whereCondition: any;
 
   if (role === "ADMIN") {
-    projects = await prisma.project.findMany({
-      include: { members: true },
-    });
+    whereCondition = {}; // all projects
+  } 
+  else if (role === "EMPLOYEE") {
+    whereCondition = {
+      members: {
+        some: { userId: id },
+      },
+    };
+  } 
+  else if (role === "CLIENT") {
+    whereCondition = {
+      clientId: id,
+    };
+  } 
+  else {
+    return res.sendStatus(403);
   }
 
-  if (role === "EMPLOYEE") {
-    projects = await prisma.project.findMany({
-      where: {
-        members: {
-          some: {
-            userId: id,
+  const projects = await prisma.project.findMany({
+    where: whereCondition,
+    select: {
+      id: true,
+      title: true,
+      description: true,
+      status: true,
+      startDate: true,
+      endDate: true,
+      client: {
+        select: { id: true, name: true, email: true },
+      },
+      members: {
+        select: {
+          user: {
+            select: { id: true, name: true, email: true },
           },
         },
       },
-    });
-  }
-
-  if (role === "CLIENT") {
-    projects = await prisma.project.findMany({
-      where: {
-        clientId: id,
-      },
-    });
-  }
+    },
+  });
 
   res.json(projects);
 };
