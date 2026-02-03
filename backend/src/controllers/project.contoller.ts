@@ -242,3 +242,42 @@ export const editProject = async (req: Request, res: Response) => {
 
   res.json(updated);
 };
+
+//DELETE PROJECT
+export const deleteProject = async (req: Request, res: Response) => {
+  const projectId = req.params.projectId as string;
+
+  const project = await prisma.project.findUnique({
+    where: { id: projectId },
+    include: {
+      tasks: true,
+      issues: true,
+    },
+  });
+
+  if (!project) {
+    return res.status(404).json({ message: "Project not found" });
+  }
+
+  //If tasks exist => no delete
+  if (project.tasks.length > 0) {
+    return res.status(400).json({
+      message:
+        "Project has tasks. Mark project as COMPLETED instead of deleting.",
+    });
+  }
+
+  //If issues exist => no delete
+  if (project.issues.length > 0) {
+    return res.status(400).json({
+      message:
+        "Project has issues. Resolve them before deleting the project.",
+    });
+  }
+
+  await prisma.project.delete({
+    where: { id: projectId },
+  });
+
+  res.json({ message: "Project deleted safely" });
+};
