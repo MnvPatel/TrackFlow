@@ -270,3 +270,40 @@ export const editTask = async (req: Request, res: Response) => {
 
   res.json(updated);
 };
+
+//DELETE TASK
+export const deleteTask = async (req: Request, res: Response) => {
+  const taskId = req.params.taskId as string;
+
+  const task = await prisma.task.findUnique({
+    where: { id: taskId },
+    include: {
+      submissions: true,
+    },
+  });
+
+  if (!task) {
+    return res.status(404).json({ message: "Task not found" });
+  }
+
+  //If submission exists => block delete
+  if (task.submissions.length > 0) {
+    return res.status(400).json({
+      message:
+        "Task has work submissions. Cannot delete task.",
+    });
+  }
+
+  //If task is submitted/approved => block delete
+  if (["SUBMITTED", "APPROVED"].includes(task.status)) {
+    return res.status(400).json({
+      message: "Cannot delete task after submission or approval",
+    });
+  }
+
+  await prisma.task.delete({
+    where: { id: taskId },
+  });
+
+  res.json({ message: "Task deleted safely" });
+};
