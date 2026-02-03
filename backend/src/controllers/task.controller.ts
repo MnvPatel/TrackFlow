@@ -146,17 +146,44 @@ export const getTaskById = async (req: any, res: Response) => {
 
   const task = await prisma.task.findUnique({
     where: { id: taskId },
-    include: {
-      assignments: true,
-      project: true,
+    select: {
+      id: true,
+      title: true,
+      description: true,
+      status: true,
+      priority: true,
+      deadline: true,
+
+      project: {
+        select: {
+          id: true,
+          title: true,
+          clientId: true, // needed for RBAC check
+        },
+      },
+
+      assignments: {
+        select: {
+          user: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+            },
+          },
+        },
+      },
     },
   });
 
-  if (!task) return res.status(404).json({ message: "Task not found" });
+  if (!task) {
+    return res.status(404).json({ message: "Task not found" });
+  }
 
+  //RBAC checks 
   if (
     role === "EMPLOYEE" &&
-    !task.assignments.some((a) => a.userId === id)
+    !task.assignments.some((a) => a.user.id === id)
   ) {
     return res.sendStatus(403);
   }
