@@ -81,31 +81,60 @@ export const createTask = async (req: any, res: Response) => {
 export const getTasks = async (req: any, res: Response) => {
   const { id, role } = req.user;
 
-  let tasks;
+  let whereCondition: any;
 
   if (role === "ADMIN") {
-    tasks = await prisma.task.findMany();
+    whereCondition = {};
+  } 
+  else if (role === "EMPLOYEE") {
+    whereCondition = {
+      assignments: {
+        some: { userId: id },
+      },
+    };
+  } 
+  else if (role === "CLIENT") {
+    whereCondition = {
+      project: {
+        clientId: id,
+      },
+    };
+  } 
+  else {
+    return res.sendStatus(403);
   }
 
-  if (role === "EMPLOYEE") {
-    tasks = await prisma.task.findMany({
-      where: {
-        assignments: {
-          some: { userId: id },
-        },
-      },
-    });
-  }
+  const tasks = await prisma.task.findMany({
+    where: whereCondition,
 
-  if (role === "CLIENT") {
-    tasks = await prisma.task.findMany({
-      where: {
-        project: {
-          clientId: id,
+    select: {
+      id: true,
+      title: true,
+      description: true,
+      status: true,
+      priority: true,
+      deadline: true,
+
+      project: {
+        select: {
+          id: true,
+          title: true,
         },
       },
-    });
-  }
+
+      assignments: {
+        select: {
+          user: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+            },
+          },
+        },
+      },
+    },
+  });
 
   res.json(tasks);
 };
