@@ -170,31 +170,58 @@ export const getProjectById = async (req: any, res: Response) => {
 
   const project = await prisma.project.findUnique({
     where: { id: projectId },
+
     include: {
-      members: true,
-      tasks: true,
-      issues: true,
+      client: {
+        select: { id: true, name: true, email: true },
+      },
+
+      members: {
+        select: {
+          user: {
+            select: { id: true, name: true, email: true },
+          },
+        },
+      },
+
+      tasks: {
+        select: {
+          id: true,
+          title: true,
+          status: true,
+          priority: true,
+          deadline: true,
+        },
+      },
+
+      issues: {
+        select: {
+          id: true,
+          title: true,
+          status: true,
+        },
+      },
     },
   });
 
-  if (!project) return res.status(404).json({ message: "Project not found" });
+  if (!project) {
+    return res.status(404).json({ message: "Project not found" });
+  }
 
-  if (
-    role === "CLIENT" &&
-    project.clientId !== id
-  ) {
+  if (role === "CLIENT" && project.client.id !== id) {
     return res.sendStatus(403);
   }
 
   if (
     role === "EMPLOYEE" &&
-    !project.members.some((m) => m.userId === id)
+    !project.members.some((m) => m.user.id === id)
   ) {
     return res.sendStatus(403);
   }
 
   res.json(project);
 };
+
 
 //ADMIN: Update Project Status
 export const updateProjectStatus = async (req: Request, res: Response) => {
