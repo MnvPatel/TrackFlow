@@ -14,7 +14,9 @@ export const sendOTP = async (
   const otp = generateOTP();
   const hash = await hashValue(otp);
 
-  await redis.set(key, hash, "EX", OTP_TTL);
+  await redis.set(key, hash, {
+    EX: OTP_TTL,
+  });
 
   await sendMail(
     email,

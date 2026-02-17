@@ -1,6 +1,19 @@
-import Redis from "ioredis";
+import { createClient } from "redis";
 
-export const redis = new Redis({
-  host: process.env.REDIS_HOST,
-  port: Number(process.env.REDIS_PORT),
+export const redis = createClient({
+  socket: {
+    host: process.env.REDIS_HOST,
+    port: Number(process.env.REDIS_PORT),
+  },
 });
+
+redis.on("error", (err) => {
+  console.error("Redis Error:", err);
+});
+
+export const connectRedis = async () => {
+  if (!redis.isOpen) {
+    await redis.connect();
+    console.log("Redis connected");
+  }
+};

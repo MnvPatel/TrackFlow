@@ -1,6 +1,9 @@
 import { app } from "./app";
 require('dotenv').config();
 import {v2 as cloudinary} from 'cloudinary';
+import { connectRedis } from "./config/redis";
+
+connectRedis();
 
 //cloudinary config
 cloudinary.config({
