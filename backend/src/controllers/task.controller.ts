@@ -1,6 +1,7 @@
 import { Request, Response } from "express";
 import prisma from "../prisma";
 import { TaskStatus } from "@prisma/client";
+import { getCache, setCache } from "../utils/cache";
 
 interface CreateTaskBody {
   title: string;
@@ -81,6 +82,14 @@ export const createTask = async (req: any, res: Response) => {
 export const getTasks = async (req: any, res: Response) => {
   const { id, role } = req.user;
 
+  const cacheKey = role === "ADMIN" ? "tasks:ADMIN" : `tasks:${role}:${id}`;
+    
+  //check cache
+  const cached = await getCache(cacheKey);
+  if (cached) {
+    return res.json(cached);
+  }
+
   let whereCondition: any;
 
   if (role === "ADMIN") {
@@ -136,6 +145,8 @@ export const getTasks = async (req: any, res: Response) => {
     },
   });
 
+  await setCache(cacheKey, tasks, 300);
+
   res.json(tasks);
 };
 
@@ -143,6 +154,13 @@ export const getTasks = async (req: any, res: Response) => {
 export const getTaskById = async (req: any, res: Response) => {
   const { taskId } = req.params;
   const { id, role } = req.user;
+
+  const cacheKey = `task:${taskId}:${role}:${id}`;
+
+  const cached = await getCache(cacheKey);
+  if (cached) {
+    return res.json(cached);
+  }
 
   const task = await prisma.task.findUnique({
     where: { id: taskId },
@@ -192,6 +210,8 @@ export const getTaskById = async (req: any, res: Response) => {
     return res.sendStatus(403);
   }
 
+  await setCache(cacheKey, task, 300);
+  
   res.json(task);
 };
 
