@@ -1,9 +1,9 @@
 import { Request, Response } from "express";
 import prisma from "../prisma";
 import { ProjectStatus } from "@prisma/client";
+import { deleteCache, getCache, setCache } from "../utils/cache";
 
 //ADMIN CREATE PROJECT
-
 interface CreateProjectBody {
   title: string;
   description?: string;
@@ -23,7 +23,7 @@ export const createProject = async (req: any, res: Response) => {
       startDate,
       endDate,
     } = req.body as CreateProjectBody;
-    
+
     if (!title || !clientId) {
       return res.status(400).json({
         message: "Title and clientId are required",
@@ -34,15 +34,9 @@ export const createProject = async (req: any, res: Response) => {
       where: { id: clientId },
     });
 
-    if (!client) {
+    if (!client || client.role !== "CLIENT") {
       return res.status(400).json({
-        message: "Client does not exist",
-      });
-    }
-
-    if (client.role !== "CLIENT") {
-      return res.status(400).json({
-        message: "Provided user is not a client",
+        message: "Invalid client",
       });
     }
 
@@ -66,8 +60,7 @@ export const createProject = async (req: any, res: Response) => {
 
       if (employees.length !== uniqueTeamMemberIds.length) {
         return res.status(400).json({
-          message:
-            "One or more team members are invalid, inactive, or not employees",
+          message: "Invalid team members",
         });
       }
     }
@@ -81,7 +74,7 @@ export const createProject = async (req: any, res: Response) => {
         startDate,
         endDate,
         members: {
-          create: uniqueTeamMemberIds.map((userId: string) => ({
+          create: uniqueTeamMemberIds.map((userId) => ({
             userId,
           })),
         },
@@ -100,13 +93,21 @@ export const createProject = async (req: any, res: Response) => {
       },
     });
 
+    //CACHE INVALIDATION
+    await deleteCache([
+      "projects:ADMIN",
+      `projects:CLIENT:${clientId}`,
+      ...uniqueTeamMemberIds.map(
+        (id) => `projects:EMPLOYEE:${id}`
+      ),
+    ]);
+
     return res.status(201).json({
       success: true,
       message: "Project created successfully",
       project,
     });
   } catch (error: any) {
-    console.error("Create Project Error:", error);
     return res.status(500).json({
       message: "Failed to create project",
     });
@@ -116,6 +117,14 @@ export const createProject = async (req: any, res: Response) => {
 //GET PROJECTS - ROLE BASED
 export const getProjects = async (req: any, res: Response) => {
   const { id, role } = req.user;
+
+  const cacheKey = role === "ADMIN" ? "projects:ADMIN" : `projects:${role}:${id}`;
+  
+  //check cache
+  const cached = await getCache(cacheKey);
+  if (cached) {
+    return res.json(cached);
+  }
 
   let whereCondition: any;
 
@@ -160,6 +169,8 @@ export const getProjects = async (req: any, res: Response) => {
     },
   });
 
+  await setCache(cacheKey, projects, 300);
+
   res.json(projects);
 };
 
@@ -167,6 +178,13 @@ export const getProjects = async (req: any, res: Response) => {
 export const getProjectById = async (req: any, res: Response) => {
   const { projectId } = req.params;
   const { id, role } = req.user;
+
+  const cacheKey = `project:${projectId}:${role}:${id}`;
+
+  const cached = await getCache(cacheKey);
+  if (cached) {
+    return res.json(cached);
+  }
 
   const project = await prisma.project.findUnique({
     where: { id: projectId },
@@ -219,6 +237,8 @@ export const getProjectById = async (req: any, res: Response) => {
     return res.sendStatus(403);
   }
 
+  await setCache(cacheKey, project, 300);
+
   res.json(project);
 };
 
@@ -232,14 +252,39 @@ export const updateProjectStatus = async (req: Request, res: Response) => {
     return res.status(400).json({ message: "Invalid project status" });
   }
 
-  const project = await prisma.project.update({
+  const project = await prisma.project.findUnique({
+    where: { id: projectId },
+    include: { members: true },
+  });
+
+  if (!project) {
+    return res.status(404).json({ message: "Project not found" });
+  }
+
+  const updated = await prisma.project.update({
     where: { id: projectId },
     data: { status },
   });
 
+  //CACHE INVALIDATION
+  await deleteCache([
+    "projects:ADMIN",
+    `projects:CLIENT:${project.clientId}`,
+    ...project.members.map(
+      (m) => `projects:EMPLOYEE:${m.userId}`
+    ),
+
+    `project:${projectId}:ADMIN`,
+    `project:${projectId}:CLIENT:${project.clientId}`,
+    ...project.members.map(
+      (m) =>
+        `project:${projectId}:EMPLOYEE:${m.userId}`
+    ),
+  ]);
+
   res.json({
     message: "Project status updated",
-    project,
+    updated
   });
 };
 
@@ -250,6 +295,7 @@ export const editProject = async (req: Request, res: Response) => {
 
   const project = await prisma.project.findUnique({
     where: { id: projectId },
+    include: { members: true },
   });
 
   if (!project) {
@@ -281,6 +327,22 @@ export const editProject = async (req: Request, res: Response) => {
     },
   });
 
+  //CACHE INVALIDATION
+  await deleteCache([
+    "projects:ADMIN",
+    `projects:CLIENT:${project.clientId}`,
+    ...project.members.map(
+      (m) => `projects:EMPLOYEE:${m.userId}`
+    ),
+
+    `project:${projectId}:ADMIN`,
+    `project:${projectId}:CLIENT:${project.clientId}`,
+    ...project.members.map(
+      (m) =>
+        `project:${projectId}:EMPLOYEE:${m.userId}`
+    ),
+  ]);
+
   res.json(updated);
 };
 
@@ -293,6 +355,7 @@ export const deleteProject = async (req: Request, res: Response) => {
     include: {
       tasks: true,
       issues: true,
+      members: true,
     },
   });
 
@@ -319,6 +382,22 @@ export const deleteProject = async (req: Request, res: Response) => {
   await prisma.project.delete({
     where: { id: projectId },
   });
+
+  //CACHE INVALIDATION
+  await deleteCache([
+    "projects:ADMIN",
+    `projects:CLIENT:${project.clientId}`,
+    ...project.members.map(
+      (m) => `projects:EMPLOYEE:${m.userId}`
+    ),
+
+    `project:${projectId}:ADMIN`,
+    `project:${projectId}:CLIENT:${project.clientId}`,
+    ...project.members.map(
+      (m) =>
+        `project:${projectId}:EMPLOYEE:${m.userId}`
+    ),
+  ]);
 
   res.json({ message: "Project deleted safely" });
 };
