@@ -16,7 +16,7 @@ router.post("/client/verify-otp", verifyClientOTP);
 router.post("/login", loginWithPassword);
 router.post("/password/setup/request", requestPasswordSetupOTP);
 router.post("/password/setup/verify", verifyPasswordSetup);
-router.post("/api/auth/refresh", refreshAccessToken);
-router.post("/api/auth/logout", logout);
+router.post("/refresh", refreshAccessToken);
+router.post("/logout", logout);
 
 export default router;

@@ -8,6 +8,9 @@
     "start": "node dist/src/server.js",
     "dev": "ts-node-dev src/server.ts"
   },
+  "prisma": {
+    "seed": "npx ts-node prisma/seed.ts"
+  },
   "keywords": [],
   "author": "",
   "license": "ISC",
@@ -19,7 +22,9 @@
     "@types/jsonwebtoken": "^9.0.10",
     "@types/nodemailer": "^7.0.9",
     "prisma": "^6.19.2",
-    "prisma-erd-generator": "^2.4.2"
+    "prisma-erd-generator": "^2.4.2",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.9.3"
   },
   "dependencies": {
     "@prisma/client": "^6.19.2",
