@@ -1,7 +1,7 @@
 import { Request, Response } from "express";
 import prisma from "../prisma";
 import { TaskStatus } from "@prisma/client";
-import { getCache, setCache } from "../utils/cache";
+import { deleteCache, getCache, setCache } from "../utils/cache";
 
 interface CreateTaskBody {
   title: string;
@@ -71,6 +71,17 @@ export const createTask = async (req: any, res: Response) => {
         },
       },
     });
+
+    //CACHE INVALIDATION
+    await deleteCache([
+      "tasks:ADMIN",
+      `tasks:CLIENT:${project.clientId}`,
+      ...assigneeIds.map(id => `tasks:EMPLOYEE:${id}`),
+
+      `project:${projectId}:ADMIN`,
+      `project:${projectId}:CLIENT:${project.clientId}`,
+      ...assigneeIds.map(id => `project:${projectId}:EMPLOYEE:${id}`)
+    ]);
 
     res.status(201).json(task);
   } catch (error) {
@@ -224,14 +235,43 @@ export const updateTaskStatus = async (req: Request, res: Response) => {
     return res.status(400).json({ message: "Invalid task status" });
   }
 
-  const task = await prisma.task.update({
+  const task = await prisma.task.findUnique({
+    where: { id: taskId },
+    include: {
+      project: true,
+      assignments: true,
+    },
+  });
+
+  if (!task) {
+    return res.status(404).json({ message: "Task not found" });
+  }
+
+  const updated = await prisma.task.update({
     where: { id: taskId },
     data: { status },
   });
 
+  const assignedUserIds = task.assignments.map(a => a.userId);
+
+  //CACHE INVALIDATION
+  await deleteCache([
+    "tasks:ADMIN",
+    `tasks:CLIENT:${task.project.clientId}`,
+    ...assignedUserIds.map(id => `tasks:EMPLOYEE:${id}`),
+
+    `task:${taskId}:ADMIN`,
+    `task:${taskId}:CLIENT:${task.project.clientId}`,
+    ...assignedUserIds.map(id => `task:${taskId}:EMPLOYEE:${id}`),
+
+    `project:${task.projectId}:ADMIN`,
+    `project:${task.projectId}:CLIENT:${task.project.clientId}`,
+    ...assignedUserIds.map(id => `project:${task.projectId}:EMPLOYEE:${id}`)
+  ]);
+
   res.json({
     message: "Task status updated",
-    task,
+    updated,
   });
 };
 
@@ -250,6 +290,10 @@ export const editTask = async (req: Request, res: Response) => {
 
   const task = await prisma.task.findUnique({
     where: { id: taskId },
+    include: {
+      project: true,
+      assignments: true,
+    },
   });
 
   if (!task) {
@@ -288,6 +332,23 @@ export const editTask = async (req: Request, res: Response) => {
     },
   });
 
+  const assignedUserIds = task!.assignments.map(a => a.userId);
+
+  //CACHE INVALIDATION
+  await deleteCache([
+    "tasks:ADMIN",
+    `tasks:CLIENT:${task!.project.clientId}`,
+    ...assignedUserIds.map(id => `tasks:EMPLOYEE:${id}`),
+
+    `task:${taskId}:ADMIN`,
+    `task:${taskId}:CLIENT:${task!.project.clientId}`,
+    ...assignedUserIds.map(id => `task:${taskId}:EMPLOYEE:${id}`),
+
+    `project:${task!.projectId}:ADMIN`,
+    `project:${task!.projectId}:CLIENT:${task!.project.clientId}`,
+    ...assignedUserIds.map(id => `project:${task!.projectId}:EMPLOYEE:${id}`)
+  ]);
+
   res.json(updated);
 };
 
@@ -299,6 +360,8 @@ export const deleteTask = async (req: Request, res: Response) => {
     where: { id: taskId },
     include: {
       submissions: true,
+      project: true,
+      assignments: true,
     },
   });
 
@@ -324,6 +387,23 @@ export const deleteTask = async (req: Request, res: Response) => {
   await prisma.task.delete({
     where: { id: taskId },
   });
+
+  const assignedUserIds = task.assignments.map(a => a.userId);
+
+  // 🔥 CACHE INVALIDATION
+  await deleteCache([
+    "tasks:ADMIN",
+    `tasks:CLIENT:${task.project.clientId}`,
+    ...assignedUserIds.map(id => `tasks:EMPLOYEE:${id}`),
+
+    `task:${taskId}:ADMIN`,
+    `task:${taskId}:CLIENT:${task.project.clientId}`,
+    ...assignedUserIds.map(id => `task:${taskId}:EMPLOYEE:${id}`),
+
+    `project:${task.projectId}:ADMIN`,
+    `project:${task.projectId}:CLIENT:${task.project.clientId}`,
+    ...assignedUserIds.map(id => `project:${task.projectId}:EMPLOYEE:${id}`)
+  ]);
 
   res.json({ message: "Task deleted safely" });
 };
