@@ -1,6 +1,6 @@
 import { Response } from "express";
 import prisma from "../prisma";
-import { deleteCache } from "../utils/cache";
+import { deleteCache, getCache, setCache } from "../utils/cache";
 
 export const submitWork = async (req: any, res: Response) => {
   try {
@@ -351,6 +351,91 @@ export const rejectSubmission = async (req: any, res: Response) => {
     console.error("Reject Error:", error);
     return res.status(500).json({
       message: "Rejection failed",
+    });
+  }
+};
+
+export const getSubmissions = async (req: any, res: Response) => {
+  try {
+    const { taskId } = req.params;
+    const { id, role } = req.user;
+
+    const task = await prisma.task.findUnique({
+      where: { id: taskId },
+      include: {
+        assignments: true,
+        project: true,
+      },
+    });
+
+    if (!task) {
+      return res.status(404).json({
+        message: "Task not found",
+      });
+    }
+    
+    if (role === "CLIENT" && task.project.clientId !== id) {
+      return res.sendStatus(403);
+    }
+
+    // EMPLOYEE → must be assigned to task
+    if (
+      role === "EMPLOYEE" &&
+      !task.assignments.some((a) => a.userId === id)
+    ) {
+      return res.sendStatus(403);
+    }
+
+    const cacheKey = `submissions:${taskId}:${role}:${id}`;
+
+    const cached = await getCache(cacheKey);
+    if (cached) {
+      return res.json(cached);
+    }
+
+    let whereCondition: any = { taskId };
+
+    if (role === "CLIENT") {
+      whereCondition.status = "APPROVED";
+    }
+
+    const submissions =
+      await prisma.workSubmission.findMany({
+        where: whereCondition,
+        select: {
+          id: true,
+          description: true,
+          percentReported: true,
+          versionNumber: true,
+          status: true,
+          createdAt: true,
+          submittedBy: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+            },
+          },
+          media: {
+            select: {
+              mediaUrl: true,
+              mediaType: true,
+            },
+          },
+        },
+        orderBy: {
+          createdAt: "desc",
+        },
+      });
+
+    //Cache Response
+    await setCache(cacheKey, submissions, 300);
+
+    return res.json(submissions);
+  } catch (error) {
+    console.error("Get Submissions Error:", error);
+    return res.status(500).json({
+      message: "Failed to fetch submissions",
     });
   }
 };
