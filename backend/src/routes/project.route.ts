@@ -6,7 +6,7 @@ import {
   getProjectById,
   editProject,
   deleteProject
-} from "../controllers/project.contoller";
+} from "../controllers/project.controller";
 import { auth } from "../middlewares/auth.middleware";
 
 const router = Router();
