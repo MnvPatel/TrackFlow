@@ -283,7 +283,7 @@ export const getProjectComments = async (req: any, res: Response) => {
     if (cached) {
       return res.json(cached);
     }
-    
+
     const comments = await prisma.comment.findMany({
       where: {
         projectId,
@@ -330,6 +330,138 @@ export const getProjectComments = async (req: any, res: Response) => {
     console.error("Get Project Comments Error:", error);
     return res.status(500).json({
       message: "Failed to fetch comments",
+    });
+  }
+};
+
+export const replyToComment = async (req: any, res: Response) => {
+  try {
+    const { commentId } = req.params;
+    const { text } = req.body;
+    const { id, role } = req.user;
+
+    if (!text) {
+      return res.status(400).json({
+        message: "Reply text is required",
+      });
+    }
+
+    const parentComment = await prisma.comment.findUnique({
+      where: { id: commentId },
+      include: {
+        task: {
+          include: {
+            assignments: true,
+            project: true,
+          },
+        },
+        project: {
+          include: {
+            members: true,
+          },
+        },
+      },
+    });
+
+    if (!parentComment) {
+      return res.status(404).json({
+        message: "Parent comment not found",
+      });
+    }
+
+    let projectId: string | null = null;
+    let taskId: string | null = null;
+    let assignedUserIds: string[] = [];
+    let memberIds: string[] = [];
+
+    //Task Comment Reply
+    if (parentComment.task) {
+      const task = parentComment.task;
+      projectId = task.projectId;
+      taskId = task.id;
+      assignedUserIds = task.assignments.map((a) => a.userId);
+
+      if (role === "CLIENT" && task.project.clientId !== id) {
+        return res.sendStatus(403);
+      }
+
+      if (role === "EMPLOYEE" && !assignedUserIds.includes(id)) {
+        return res.sendStatus(403);
+      }
+    }
+
+    //Project Comment Reply
+    else if (parentComment.project) {
+      const project = parentComment.project;
+      projectId = project.id;
+      memberIds = project.members.map((m) => m.userId);
+
+      if (role === "CLIENT") {
+        return res.sendStatus(403);
+      }
+
+      if (role === "EMPLOYEE" && !memberIds.includes(id)) {
+        return res.sendStatus(403);
+      }
+    } else {
+      return res.status(400).json({
+        message: "Invalid comment context",
+      });
+    }
+
+    const reply = await prisma.comment.create({
+      data: {
+        text,
+        parentCommentId: commentId,
+        taskId,
+        projectId,
+        authorId: id,
+      },
+      include: {
+        author: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+          },
+        },
+      },
+    });
+
+    //Cache Invalidation
+    const cacheKeys: string[] = [];
+
+    if (taskId) {
+      cacheKeys.push(
+        `taskComments:${taskId}`,
+        `taskComments:${taskId}:ADMIN`,
+        ...assignedUserIds.map(
+          (uid) => `taskComments:${taskId}:EMPLOYEE:${uid}`,
+        ),
+      );
+    }
+
+    if (projectId) {
+      cacheKeys.push(
+        `projectComments:${projectId}`,
+        `projectComments:${projectId}:ADMIN`,
+        ...memberIds.map(
+          (uid) => `projectComments:${projectId}:EMPLOYEE:${uid}`,
+        ),
+      );
+    }
+
+    await deleteCache(cacheKeys);
+
+    return res.status(201).json({
+      success: true,
+      message: "Reply added successfully",
+      reply,
+    });
+  } catch (error) {
+    console.error("Reply Comment Error:", error);
+    return res.status(500).json({
+      message: "Failed to reply to comment",
     });
   }
 };
