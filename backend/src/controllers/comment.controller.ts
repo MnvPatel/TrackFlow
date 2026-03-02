@@ -1,6 +1,6 @@
 import { Response } from "express";
 import prisma from "../prisma";
-import { deleteCache } from "../utils/cache";
+import { deleteCache, getCache, setCache } from "../utils/cache";
 
 export const addTaskComment = async (req: any, res: Response) => {
   try {
@@ -73,7 +73,9 @@ export const addTaskComment = async (req: any, res: Response) => {
 
       `project:${task.projectId}:ADMIN`,
       `project:${task.projectId}:CLIENT:${task.project.clientId}`,
-      ...assignedUserIds.map((id) => `project:${task.projectId}:EMPLOYEE:${id}`)
+      ...assignedUserIds.map(
+        (id) => `project:${task.projectId}:EMPLOYEE:${id}`,
+      ),
     ]);
 
     return res.status(201).json({
@@ -85,6 +87,90 @@ export const addTaskComment = async (req: any, res: Response) => {
     console.error("Add Task Comment Error:", error);
     return res.status(500).json({
       message: "Failed to add comment",
+    });
+  }
+};
+
+export const getTaskComments = async (req: any, res: Response) => {
+  try {
+    const { taskId } = req.params;
+    const { id, role } = req.user;
+
+    const task = await prisma.task.findUnique({
+      where: { id: taskId },
+      include: {
+        assignments: true,
+        project: true,
+      },
+    });
+
+    if (!task) {
+      return res.status(404).json({
+        message: "Task not found",
+      });
+    }
+
+    if (role === "CLIENT" && task.project.clientId !== id) {
+      return res.sendStatus(403);
+    }
+
+    if (role === "EMPLOYEE" && !task.assignments.some((a) => a.userId === id)) {
+      return res.sendStatus(403);
+    }
+
+    const cacheKey = `taskComments:${taskId}:${role}:${id}`;
+
+    const cached = await getCache(cacheKey);
+    if (cached) {
+      return res.json(cached);
+    }
+
+    const comments = await prisma.comment.findMany({
+      where: {
+        taskId,
+        parentCommentId: null,
+      },
+      select: {
+        id: true,
+        text: true,
+        createdAt: true,
+        author: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+          },
+        },
+        replies: {
+          select: {
+            id: true,
+            text: true,
+            createdAt: true,
+            author: {
+              select: {
+                id: true,
+                name: true,
+                email: true,
+              },
+            },
+          },
+          orderBy: {
+            createdAt: "asc",
+          },
+        },
+      },
+      orderBy: {
+        createdAt: "asc",
+      },
+    });
+
+    await setCache(cacheKey, comments, 300);
+
+    return res.json(comments);
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({
+      message: "Failed to fetch comments",
     });
   }
 };
