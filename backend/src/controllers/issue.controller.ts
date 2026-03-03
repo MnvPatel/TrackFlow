@@ -103,3 +103,54 @@ export const getProjectIssues = async (req: any, res: Response) => {
     });
   }
 };
+
+export const getIssueById = async (req: any, res: Response) => {
+  try {
+    const { issueId } = req.params;
+    const { id, role } = req.user;
+
+    const issue = await prisma.issue.findUnique({
+      where: { id: issueId },
+      include: {
+        project: true,
+        convertedTask: {
+          select: {
+            id: true,
+            title: true,
+            status: true,
+          },
+        },
+      },
+    });
+
+    if (!issue) {
+      return res.status(404).json({
+        message: "Issue not found",
+      });
+    }
+
+    if (role === "CLIENT" && issue.project.clientId !== id) {
+      return res.sendStatus(403);
+    }
+
+    if (role !== "ADMIN" && role !== "CLIENT") {
+      return res.sendStatus(403);
+    }
+
+    const cacheKey = `issue:${issueId}:${role}:${id}`;
+
+    const cached = await getCache(cacheKey);
+    if (cached) {
+      return res.json(cached);
+    }
+
+    await setCache(cacheKey, issue, 300);
+
+    return res.json(issue);
+  } catch (error) {
+    console.error("Get Issue By Id Error:", error);
+    return res.status(500).json({
+      message: "Failed to fetch issue",
+    });
+  }
+};
