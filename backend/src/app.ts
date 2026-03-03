@@ -6,6 +6,7 @@ import projectRoutes from "./routes/project.route";
 import taskRoutes from "./routes/task.route";
 import submissionRoutes from "./routes/submission.route";
 import commentRoutes from "./routes/comment.route";
+import issueRoutes from "./routes/issue.route";
 
 export const app = express();
 
@@ -19,6 +20,7 @@ app.use("/api/projects", projectRoutes);
 app.use("/api/tasks", taskRoutes);
 app.use("/api/submission", submissionRoutes);
 app.use("/api/comment", commentRoutes);
+app.use("/api/issues", issueRoutes);
 
 //GLOBAL ERROR HANDLER 
 app.use((err: any, req: any, res: any, next: any) => {
