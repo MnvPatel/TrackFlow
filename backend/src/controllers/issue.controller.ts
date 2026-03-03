@@ -43,11 +43,7 @@ export const createIssue = async (req: any, res: Response) => {
     });
 
     //Cache invalidation
-    await deleteCache([
-      `issues:${projectId}`,
-      `project:${projectId}:ADMIN`,
-      `project:${projectId}:CLIENT:${id}`,
-    ]);
+    await deleteCache([`issues:${projectId}:*`, `project:${projectId}:*`]);
 
     return res.status(201).json({
       success: true,
@@ -85,7 +81,7 @@ export const getProjectIssues = async (req: any, res: Response) => {
       return res.sendStatus(403);
     }
 
-    const cacheKey = `issues:${projectId}`;
+    const cacheKey = `issues:${projectId}:${role}:${id}`;
 
     const cached = await getCache(cacheKey);
     if (cached) {
