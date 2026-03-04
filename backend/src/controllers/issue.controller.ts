@@ -154,3 +154,79 @@ export const getIssueById = async (req: any, res: Response) => {
     });
   }
 };
+
+export const convertIssueToTask = async (req: any, res: Response) => {
+  try {
+    const { issueId } = req.params;
+    const { priority, deadline, assigneeIds } = req.body;
+    const { role, id } = req.user;
+
+    if (role !== "ADMIN") {
+      return res.sendStatus(403);
+    }
+
+    const issue = await prisma.issue.findUnique({
+      where: { id: issueId },
+      include: { project: true },
+    });
+
+    if (!issue) {
+      return res.status(404).json({
+        message: "Issue not found",
+      });
+    }
+
+    if (issue.status === "CONVERTED_TO_TASK") {
+      return res.status(400).json({
+        message: "Issue already converted",
+      });
+    }
+
+    const task = await prisma.task.create({
+      data: {
+        title: issue.title,
+        description: issue.description,
+        priority,
+        deadline,
+        projectId: issue.projectId,
+        createdById: id,
+        assignments: {
+          create: assigneeIds.map((uid: string) => ({
+            userId: uid,
+          })),
+        },
+      },
+    });
+
+    await prisma.issue.update({
+      where: { id: issueId },
+      data: {
+        status: "CONVERTED_TO_TASK",
+        convertedTaskId: task.id,
+      },
+    });
+
+    //Cache Invalidation
+    await deleteCache([
+      `issues:${issue.projectId}:*`,
+      `issue:${issueId}:*`,
+
+      `tasks:*`,
+      `task:${task.id}:*`,
+
+      `project:${issue.projectId}:*`,
+      `projects:*`,
+    ]);
+
+    return res.json({
+      success: true,
+      message: "Issue converted to task",
+      task,
+    });
+  } catch (error) {
+    console.error("Convert Issue Error:", error);
+    return res.status(500).json({
+      message: "Conversion failed",
+    });
+  }
+};
