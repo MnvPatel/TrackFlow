@@ -1,6 +1,7 @@
 import { Request, Response } from "express";
 import prisma from "../prisma";
 import { deleteCache, getCache, setCache } from "../utils/cache";
+import { createBulkNotification, createNotification } from "../services/notification.service";
 
 export const createIssue = async (req: any, res: Response) => {
   try {
@@ -44,6 +45,21 @@ export const createIssue = async (req: any, res: Response) => {
 
     //Cache invalidation
     await deleteCache([`issues:${projectId}:*`, `project:${projectId}:*`]);
+
+    const admins = await prisma.user.findMany({
+      where: {
+        role: "ADMIN",
+      },
+      select: { id: true },
+    });
+
+    await createBulkNotification({
+      userIds: admins.map(a => a.id),
+      title: "New Issue Raised",
+      message: `Client reported issue: "${title}"`,
+      entityType: "ISSUE",
+      entityId: issue.id,
+    });
 
     return res.status(201).json({
       success: true,
@@ -217,6 +233,22 @@ export const convertIssueToTask = async (req: any, res: Response) => {
       `project:${issue.projectId}:*`,
       `projects:*`,
     ]);
+
+    await createNotification({
+      userId: issue.project.clientId,
+      title: "Issue Converted to Task",
+      message: `Issue "${issue.title}" has been converted to a task`,
+      entityType: "ISSUE",
+      entityId: issue.id,
+    });
+
+    await createBulkNotification({
+      userIds: assigneeIds,
+      title: "New Task from Issue",
+      message: `Task created from issue "${issue.title}"`,
+      entityType: "TASK",
+      entityId: task.id,
+    });
 
     return res.json({
       success: true,

@@ -1,6 +1,7 @@
 import { Response } from "express";
 import prisma from "../prisma";
 import { deleteCache, getCache, setCache } from "../utils/cache";
+import { createBulkNotification, createNotification } from "../services/notification.service";
 
 export const submitWork = async (req: any, res: Response) => {
   try {
@@ -87,6 +88,13 @@ export const submitWork = async (req: any, res: Response) => {
       data: { status: "SUBMITTED" },
     });
 
+    const admins = await prisma.user.findMany({
+      where: {
+        role: "ADMIN",
+      },
+      select: { id: true },
+    });
+
     //Cache Invalidation
     const assignedUserIds = task.assignments.map(
       (a) => a.userId
@@ -112,6 +120,22 @@ export const submitWork = async (req: any, res: Response) => {
           `project:${task.projectId}:EMPLOYEE:${id}`
       ),
     ]);
+
+    await createNotification({
+      userId: task.project.clientId,
+      title: "Work Submitted",
+      message: `New work submitted for task "${task.title}"`,
+      entityType: "SUBMISSION",
+      entityId: submission.id,
+    });
+
+    await createBulkNotification({
+      userIds: admins.map(a => a.id),
+      title: "Work Submitted",
+      message: `Employee submitted work for task "${task.title}"`,
+      entityType: "SUBMISSION",
+      entityId: submission.id,
+    });
 
     return res.status(201).json({
       success: true,
@@ -235,6 +259,14 @@ export const approveSubmission = async (req: any, res: Response) => {
       ),
     ]);
 
+    await createNotification({
+      userId: submission.submittedById,
+      title: "Submission Approved",
+      message: `Your submission for task "${task.title}" was approved`,
+      entityType: "SUBMISSION",
+      entityId: submission.id,
+    });
+
     return res.json({
       success: true,
       message: "Submission approved",
@@ -342,6 +374,14 @@ export const rejectSubmission = async (req: any, res: Response) => {
           `project:${project.id}:EMPLOYEE:${id}`
       ),
     ]);
+
+    await createNotification({
+      userId: submission.submittedById,
+      title: "Submission Rejected",
+      message: `Your submission for task "${task.title}" was rejected`,
+      entityType: "SUBMISSION",
+      entityId: submission.id,
+    });
 
     return res.json({
       success: true,

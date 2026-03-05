@@ -2,6 +2,7 @@ import { Request, Response } from "express";
 import prisma from "../prisma";
 import { TaskStatus } from "@prisma/client";
 import { deleteCache, getCache, setCache } from "../utils/cache";
+import { createBulkNotification } from "../services/notification.service";
 
 interface CreateTaskBody {
   title: string;
@@ -82,6 +83,14 @@ export const createTask = async (req: any, res: Response) => {
       `project:${projectId}:CLIENT:${project.clientId}`,
       ...assigneeIds.map(id => `project:${projectId}:EMPLOYEE:${id}`)
     ]);
+
+    await createBulkNotification({
+      userIds: assigneeIds,
+      title: "New Task Assigned",
+      message: `You were assigned task "${title}"`,
+      entityType: "TASK",
+      entityId: task.id,
+    });
 
     res.status(201).json(task);
   } catch (error) {

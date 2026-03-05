@@ -1,6 +1,7 @@
 import { Response } from "express";
 import prisma from "../prisma";
 import { deleteCache, getCache, setCache } from "../utils/cache";
+import { createBulkNotification } from "../services/notification.service";
 
 export const addTaskComment = async (req: any, res: Response) => {
   try {
@@ -77,6 +78,19 @@ export const addTaskComment = async (req: any, res: Response) => {
         (id) => `project:${task.projectId}:EMPLOYEE:${id}`,
       ),
     ]);
+
+    const participantIds = [
+      ...assignedUserIds,
+      task.project.clientId,
+    ];
+
+    await createBulkNotification({
+      userIds: participantIds,
+      title: "New Comment",
+      message: `New comment added on task "${task.title}"`,
+      entityType: "COMMENT",
+      entityId: comment.id,
+    });
 
     return res.status(201).json({
       success: true,
@@ -237,6 +251,30 @@ export const addProjectComment = async (req: any, res: Response) => {
       `project:${projectId}:ADMIN`,
       ...memberIds.map((id) => `project:${projectId}:EMPLOYEE:${id}`),
     ]);
+    
+    const admins = await prisma.user.findMany({
+      where: { role: "ADMIN" },
+      select: { id: true },
+    });
+
+    let participantIds = [
+      ...memberIds,
+      ...admins.map((a) => a.id),
+    ];
+
+    //Remove duplicates
+    participantIds = [...new Set(participantIds)];
+
+    //Remove user that is commenting
+    participantIds = participantIds.filter((uid) => uid !== id);
+
+    await createBulkNotification({
+      userIds: participantIds,
+      title: "New Comment",
+      message: `New comment added on project "${project.title}"`,
+      entityType: "COMMENT",
+      entityId: comment.id,
+    });
 
     return res.status(201).json({
       success: true,
@@ -452,6 +490,44 @@ export const replyToComment = async (req: any, res: Response) => {
     }
 
     await deleteCache(cacheKeys);
+
+    const admins = await prisma.user.findMany({
+      where: { role: "ADMIN" },
+      select: { id: true },
+    });
+
+    let participantIds: string[] = [];
+
+    //Task comment participants
+    if (taskId) {
+      participantIds = [
+        ...assignedUserIds,
+        parentComment.task!.project.clientId,
+      ];
+    }
+
+    //Project comment participants
+    if (projectId) {
+      participantIds = [
+        ...memberIds,
+      ];
+    }
+
+    participantIds.push(...admins.map(a => a.id));
+
+    //Remove duplicates
+    participantIds = [...new Set(participantIds)];
+
+    //Remove user that is commenting
+    participantIds = participantIds.filter(uid => uid !== id);
+
+    await createBulkNotification({
+      userIds: participantIds,
+      title: "New Comment Reply",
+      message: "A new reply was added to a comment",
+      entityType: "COMMENT",
+      entityId: reply.id,
+    });
 
     return res.status(201).json({
       success: true,

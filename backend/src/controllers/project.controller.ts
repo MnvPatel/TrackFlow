@@ -2,6 +2,7 @@ import { Request, Response } from "express";
 import prisma from "../prisma";
 import { ProjectStatus } from "@prisma/client";
 import { deleteCache, getCache, setCache } from "../utils/cache";
+import { createBulkNotification, createNotification } from "../services/notification.service";
 
 //ADMIN CREATE PROJECT
 interface CreateProjectBody {
@@ -101,6 +102,22 @@ export const createProject = async (req: any, res: Response) => {
         (id) => `projects:EMPLOYEE:${id}`
       ),
     ]);
+
+    await createNotification({
+      userId: clientId,
+      title: "Project Created",
+      message: `Project "${title}" has been created`,
+      entityType: "PROJECT",
+      entityId: project.id,
+    });
+
+    await createBulkNotification({
+      userIds: teamMemberIds,
+      title: "Assigned to Project",
+      message: `You were added to project "${title}"`,
+      entityType: "PROJECT",
+      entityId: project.id,
+    });
 
     return res.status(201).json({
       success: true,
