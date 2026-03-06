@@ -1,4 +1,4 @@
-import { Request, Response } from "express";
+import { Response } from "express";
 import prisma from "../prisma";
 import { ProjectStatus } from "@prisma/client";
 import { deleteCache, getCache, setCache } from "../utils/cache";
@@ -261,7 +261,7 @@ export const getProjectById = async (req: any, res: Response) => {
 
 
 //ADMIN: Update Project Status
-export const updateProjectStatus = async (req: Request, res: Response) => {
+export const updateProjectStatus = async (req: any, res: Response) => {
   const projectId = req.params.projectId as string;
   const { status } = req.body;
 
@@ -299,6 +299,33 @@ export const updateProjectStatus = async (req: Request, res: Response) => {
     ),
   ]);
 
+  const admins = await prisma.user.findMany({
+    where: { role: "ADMIN" },
+    select: { id: true },
+  });
+
+  const memberIds = project.members.map((m) => m.userId);
+
+  let participantIds = [
+    project.clientId,
+    ...memberIds,
+    ...admins.map((a) => a.id),
+  ];
+
+  //Remove duplicates
+  participantIds = [...new Set(participantIds)];
+
+  //remove the user that is commenting
+  participantIds = participantIds.filter(uid => uid !== req.user?.id);
+
+  await createBulkNotification({
+    userIds: participantIds,
+    title: "Project Status Updated",
+    message: `Project "${project.title}" status changed to ${status}`,
+    entityType: "PROJECT",
+    entityId: projectId,
+  });
+
   res.json({
     message: "Project status updated",
     updated
@@ -306,7 +333,7 @@ export const updateProjectStatus = async (req: Request, res: Response) => {
 };
 
 //EDIT PROJECT
-export const editProject = async (req: Request, res: Response) => {
+export const editProject = async (req: any, res: Response) => {
   const projectId = req.params.projectId as string;
   const { title, description, startDate, endDate, status } = req.body;
 
@@ -360,11 +387,36 @@ export const editProject = async (req: Request, res: Response) => {
     ),
   ]);
 
+  const admins = await prisma.user.findMany({
+    where: { role: "ADMIN" },
+    select: { id: true },
+  });
+
+  const memberIds = project.members.map((m) => m.userId);
+  
+  let participantIds = [
+    project.clientId,
+    ...memberIds,
+    ...admins.map((a) => a.id),
+  ];
+  
+  participantIds = [...new Set(participantIds)];
+
+  participantIds = participantIds.filter(uid => uid !== req.user?.id);
+
+  await createBulkNotification({
+    userIds: participantIds,
+    title: "Project Updated",
+    message: `Project "${project.title}" details were updated`,
+    entityType: "PROJECT",
+    entityId: projectId,
+  });
+
   res.json(updated);
 };
 
 //DELETE PROJECT
-export const deleteProject = async (req: Request, res: Response) => {
+export const deleteProject = async (req: any, res: Response) => {
   const projectId = req.params.projectId as string;
 
   const project = await prisma.project.findUnique({
@@ -415,6 +467,31 @@ export const deleteProject = async (req: Request, res: Response) => {
         `project:${projectId}:EMPLOYEE:${m.userId}`
     ),
   ]);
+
+  const admins = await prisma.user.findMany({
+    where: { role: "ADMIN" },
+    select: { id: true },
+  });
+
+  const memberIds = project.members.map((m) => m.userId);
+
+  let participantIds = [
+    project.clientId,
+    ...memberIds,
+    ...admins.map((a) => a.id),
+  ];
+
+  participantIds = [...new Set(participantIds)];
+
+  participantIds = participantIds.filter(uid => uid !== req.user?.id);
+
+  await createBulkNotification({
+    userIds: participantIds,
+    title: "Project Deleted",
+    message: `Project "${project.title}" has been removed`,
+    entityType: "PROJECT",
+    entityId: projectId,
+  });
 
   res.json({ message: "Project deleted safely" });
 };

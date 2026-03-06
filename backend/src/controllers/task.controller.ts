@@ -236,7 +236,7 @@ export const getTaskById = async (req: any, res: Response) => {
 };
 
 //ADMIN: Update Task Status
-export const updateTaskStatus = async (req: Request, res: Response) => {
+export const updateTaskStatus = async (req: any, res: Response) => {
   const taskId = req.params.taskId as string;
   const { status } = req.body;
 
@@ -278,6 +278,31 @@ export const updateTaskStatus = async (req: Request, res: Response) => {
     ...assignedUserIds.map(id => `project:${task.projectId}:EMPLOYEE:${id}`)
   ]);
 
+  const admins = await prisma.user.findMany({
+    where: { role: "ADMIN" },
+    select: { id: true },
+  });
+
+  let participantIds = [
+    task.project.clientId,
+    ...assignedUserIds,
+    ...admins.map(a => a.id),
+  ];
+
+  // remove duplicates
+  participantIds = [...new Set(participantIds)];
+
+  // remove actor
+  participantIds = participantIds.filter(uid => uid !== req.user?.id);
+
+  await createBulkNotification({
+    userIds: participantIds,
+    title: "Task Status Updated",
+    message: `Task "${task.title}" status changed to ${status}`,
+    entityType: "TASK",
+    entityId: taskId,
+  });
+
   res.json({
     message: "Task status updated",
     updated,
@@ -293,7 +318,7 @@ const allowedTransitions: Record<string, string[]> = {
   APPROVED: [],
 };
 
-export const editTask = async (req: Request, res: Response) => {
+export const editTask = async (req: any, res: Response) => {
   const taskId = req.params.taskId as string;
   const { title, description, priority, deadline, status } = req.body;
 
@@ -358,11 +383,34 @@ export const editTask = async (req: Request, res: Response) => {
     ...assignedUserIds.map(id => `project:${task!.projectId}:EMPLOYEE:${id}`)
   ]);
 
+  const admins = await prisma.user.findMany({
+    where: { role: "ADMIN" },
+    select: { id: true },
+  });
+
+  let participantIds = [
+    task.project.clientId,
+    ...assignedUserIds,
+    ...admins.map(a => a.id),
+  ];
+
+  participantIds = [...new Set(participantIds)];
+
+  participantIds = participantIds.filter(uid => uid !== req.user?.id);
+
+  await createBulkNotification({
+    userIds: participantIds,
+    title: "Task Updated",
+    message: `Task "${task.title}" was updated`,
+    entityType: "TASK",
+    entityId: taskId,
+  });
+
   res.json(updated);
 };
 
 //DELETE TASK
-export const deleteTask = async (req: Request, res: Response) => {
+export const deleteTask = async (req: any, res: Response) => {
   const taskId = req.params.taskId as string;
 
   const task = await prisma.task.findUnique({
@@ -413,6 +461,29 @@ export const deleteTask = async (req: Request, res: Response) => {
     `project:${task.projectId}:CLIENT:${task.project.clientId}`,
     ...assignedUserIds.map(id => `project:${task.projectId}:EMPLOYEE:${id}`)
   ]);
+
+  const admins = await prisma.user.findMany({
+    where: { role: "ADMIN" },
+    select: { id: true },
+  });
+
+  let participantIds = [
+    task.project.clientId,
+    ...assignedUserIds,
+    ...admins.map(a => a.id),
+  ];
+
+  participantIds = [...new Set(participantIds)];
+  
+  participantIds = participantIds.filter(uid => uid !== req.user?.id);
+
+  await createBulkNotification({
+    userIds: participantIds,
+    title: "Task Deleted",
+    message: `Task "${task.title}" has been removed`,
+    entityType: "TASK",
+    entityId: taskId,
+  });
 
   res.json({ message: "Task deleted safely" });
 };
