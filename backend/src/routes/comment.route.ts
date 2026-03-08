@@ -8,6 +8,6 @@ router.post("/tasks/:taskId/comments", auth(["ADMIN", "EMPLOYEE", "CLIENT"]), ad
 router.get("/tasks/:taskId/comments", auth(["ADMIN", "EMPLOYEE", "CLIENT"]), getTaskComments );
 router.post("/projects/:projectId/comments", auth(["ADMIN", "EMPLOYEE"]), addProjectComment);
 router.get("/projects/:projectId/comments", auth(["ADMIN", "EMPLOYEE"]), getProjectComments);
-router.post("/comments/:commentId/reply", auth(["ADMIN", "EMPLOYEE", "CLIENT"]), replyToComment);
+router.post("/:commentId/reply", auth(["ADMIN", "EMPLOYEE", "CLIENT"]), replyToComment);
 
 export default router;
