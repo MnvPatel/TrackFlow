@@ -1,5 +1,5 @@
+require("dotenv").config();
 import { app } from "./app";
-require('dotenv').config();
 import {v2 as cloudinary} from 'cloudinary';
 import { connectRedis } from "./config/redis";
 
@@ -12,6 +12,8 @@ cloudinary.config({
     api_secret: process.env.CLOUD_SECRET_KEY,
 })
 
-app.listen(process.env.PORT, () => {
-    console.log(`Server is Connected to ${process.env.PORT}`)
-})
+const PORT = process.env.PORT || 5000;
+app.listen(PORT, () => {
+  console.log("\n========== TaskManagingPortal BACKEND ==========");
+  console.log(`Server listening on http://localhost:${PORT}`);
+});

@@ -10,8 +10,8 @@ interface CreateProjectBody {
   description?: string;
   clientId: string;
   teamMemberIds: string[];
-  startDate?: string;
-  endDate?: string;
+  startDate?: Date;
+  endDate?: Date;
 }
 
 export const createProject = async (req: any, res: Response) => {
@@ -448,8 +448,15 @@ export const deleteProject = async (req: any, res: Response) => {
     });
   }
 
-  await prisma.project.delete({
-    where: { id: projectId },
+  await prisma.$transaction(async (tx) => {
+    await tx.comment.updateMany({
+      where: { projectId },
+      data: { parentCommentId: null },
+    });
+    await tx.comment.deleteMany({ where: { projectId } });
+    await tx.milestone.deleteMany({ where: { projectId } });
+    await tx.projectMember.deleteMany({ where: { projectId } });
+    await tx.project.delete({ where: { id: projectId } });
   });
 
   //CACHE INVALIDATION

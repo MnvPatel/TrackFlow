@@ -2,7 +2,7 @@ import { Request, Response } from "express";
 import bcrypt from "bcrypt";
 import prisma from "../prisma";
 import { sendOTP, verifyOTP } from "../services/otp.service";
-import { signAccessToken, signRefreshToken } from "../utils/jwt";
+import { signAccessToken, signRefreshToken, getRefreshSecret } from "../utils/jwt";
 import jwt from "jsonwebtoken";
 
 //CLIENT REGISTRATION
@@ -66,11 +66,11 @@ export const loginWithPassword = async (req: Request, res: Response) => {
   });
 
   res.cookie("refreshToken", refreshToken, {
-  httpOnly: true,
-  secure: true,
-  sameSite: "strict",
-  path: "/auth/refresh",
-});
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "strict",
+    path: "/api/auth/refresh",
+  });
 
 
   res.json({ accessToken, role: user.role });
@@ -82,7 +82,9 @@ export const refreshAccessToken = async (req: Request, res: Response) => {
   if (!token) return res.sendStatus(401);
 
   try {
-    const payload: any = jwt.verify(token, process.env.JWT_REFRESH_SECRET!);
+    const secret = getRefreshSecret();
+    if (!secret) return res.status(500).json({ message: "Server: refresh secret not configured" });
+    const payload: any = jwt.verify(token, secret);
 
     const user = await prisma.user.findUnique({ where: { id: payload.id } });
     if (!user || user.refreshTokenVersion !== payload.tokenVersion)
@@ -136,7 +138,12 @@ export const logout = async (req: any, res: Response) => {
     },
   });
 
-  res.clearCookie("refreshToken", { path: "/api/auth/refresh" });
+  res.clearCookie("refreshToken", {
+    path: "/api/auth/refresh",
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "strict",
+  });
 
   res.json({ message: "Logged out successfully" });
 };

@@ -441,8 +441,14 @@ export const deleteTask = async (req: any, res: Response) => {
     });
   }
 
-  await prisma.task.delete({
-    where: { id: taskId },
+  await prisma.$transaction(async (tx) => {
+    await tx.comment.updateMany({
+      where: { taskId },
+      data: { parentCommentId: null },
+    });
+    await tx.comment.deleteMany({ where: { taskId } });
+    await tx.taskAssignment.deleteMany({ where: { taskId } });
+    await tx.task.delete({ where: { id: taskId } });
   });
 
   const assignedUserIds = task.assignments.map(a => a.userId);
