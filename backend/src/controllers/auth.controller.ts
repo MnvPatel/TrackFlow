@@ -46,34 +46,39 @@ export const verifyClientOTP = async (req: Request, res: Response) => {
 
 //LOGIN WITH PASSWORD (ALL ROLES)
 export const loginWithPassword = async (req: Request, res: Response) => {
-  const { email, password } = req.body;
+  try {
+    const { email, password } = req.body;
 
-  const user = await prisma.user.findUnique({ where: { email } });
-  if (!user || !user.passwordHash)
-    return res.status(400).json({ message: "Invalid credentials" });
+    const user = await prisma.user.findUnique({ where: { email } });
+    if (!user || !user.passwordHash)
+      return res.status(400).json({ message: "Invalid credentials" });
 
-  if (!user.isVerified)
-    return res.status(403).json({ message: "Account not verified" });
+    if (!user.isVerified)
+      return res.status(403).json({ message: "Account not verified" });
 
-  const match = await bcrypt.compare(password, user.passwordHash);
-  if (!match) return res.status(400).json({ message: "Invalid credentials" });
+    const match = await bcrypt.compare(password, user.passwordHash);
+    if (!match) return res.status(400).json({ message: "Invalid credentials" });
 
-  const accessToken = signAccessToken({ id: user.id, role: user.role });
+    const accessToken = signAccessToken({ id: user.id, role: user.role });
 
-  const refreshToken = signRefreshToken({
-    id: user.id,
-    tokenVersion: user.refreshTokenVersion,
-  });
+    const refreshToken = signRefreshToken({
+      id: user.id,
+      tokenVersion: user.refreshTokenVersion,
+    });
 
-  res.cookie("refreshToken", refreshToken, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "strict",
-    path: "/api/auth/refresh",
-  });
+    res.cookie("refreshToken", refreshToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "strict",
+      path: "/api/auth/refresh",
+    });
 
-
-  res.json({ accessToken, role: user.role });
+    res.json({ accessToken, role: String(user.role) });
+  } catch (err) {
+    console.error("Login error:", err);
+    const message = err instanceof Error ? err.message : "Internal server error";
+    res.status(500).json({ message });
+  }
 };
 
 //REFRESH TOKEN API

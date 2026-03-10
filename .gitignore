@@ -1,0 +1,34 @@
+# Dependencies
+node_modules/
+
+# Build / output
+dist/
+build/
+*.tsbuildinfo
+
+# Environment (keep .env.example)
+.env
+.env.local
+.env.*.local
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE / editor (optional – uncomment if you want to ignore)
+# .vscode/
+# .idea/
+
+# Vite
+.vite/
+
+# Test / coverage
+coverage/
+
+# Backend-specific (Prisma etc.) – paths relative to backend/
+backend/src/generated/
+backend/prisma/migrations/

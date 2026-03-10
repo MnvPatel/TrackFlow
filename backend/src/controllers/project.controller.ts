@@ -48,7 +48,7 @@ export const createProject = async (req: any, res: Response) => {
     }
 
     //validate team members - remove duplicates
-    const uniqueTeamMemberIds = [...new Set(teamMemberIds)];
+    const uniqueTeamMemberIds = [...new Set(teamMemberIds || [])];
 
     if (uniqueTeamMemberIds.length > 0) {
       const employees = await prisma.user.findMany({
@@ -66,14 +66,32 @@ export const createProject = async (req: any, res: Response) => {
       }
     }
 
+    const start =
+      startDate != null && String(startDate).trim() !== ""
+        ? new Date(startDate as string | Date)
+        : undefined;
+    const end =
+      endDate != null && String(endDate).trim() !== ""
+        ? new Date(endDate as string | Date)
+        : undefined;
+    if (start !== undefined && isNaN(start.getTime())) {
+      return res.status(400).json({ message: "Invalid startDate" });
+    }
+    if (end !== undefined && isNaN(end.getTime())) {
+      return res.status(400).json({ message: "Invalid endDate" });
+    }
+    if (start !== undefined && end !== undefined && end < start) {
+      return res.status(400).json({ message: "endDate must be after startDate" });
+    }
+
     const project = await prisma.project.create({
       data: {
         title,
         description,
         clientId,
         createdById: req.user.id,
-        startDate,
-        endDate,
+        ...(start !== undefined && { startDate: start }),
+        ...(end !== undefined && { endDate: end }),
         members: {
           create: uniqueTeamMemberIds.map((userId) => ({
             userId,
