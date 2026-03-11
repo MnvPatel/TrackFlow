@@ -19,7 +19,7 @@ export default function Projects() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    api.get<Project[]>("/api/projects")
+    api.get<Project[]>("/api/projects/")
       .then((res) => setList(res.data))
       .catch((e) => setErr(e instanceof Error ? e.message : "Failed"))
       .finally(() => setLoading(false));

@@ -21,7 +21,7 @@ export default function Tasks() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    api.get<Task[]>("/api/tasks")
+    api.get<Task[]>("/api/tasks/")
       .then((res) => setList(res.data))
       .catch((e) => setErr(e instanceof Error ? e.message : "Failed"))
       .finally(() => setLoading(false));

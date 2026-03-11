@@ -211,6 +211,8 @@ export const getTaskById = async (req: any, res: Response) => {
           },
         },
       },
+      comments: true,
+      submissions: true,
     },
   });
 

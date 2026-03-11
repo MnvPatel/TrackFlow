@@ -4,6 +4,7 @@ import { api } from "../lib/axios";
 import type { Task, WorkSubmission, Comment } from "../types";
 import Card from "../components/Card";
 import Button from "../components/Button";
+import CommentSection from "../components/CommentSection";
 import { useAuth } from "../context/AuthContext";
 
 const statusColors: Record<string, string> = {
@@ -13,6 +14,8 @@ const statusColors: Record<string, string> = {
   APPROVED: "var(--success)",
   REJECTED: "var(--danger)",
 };
+
+type TabKey = "submissions" | "comments";
 
 export default function TaskDetail() {
   const { taskId } = useParams<{ taskId: string }>();
@@ -24,8 +27,9 @@ export default function TaskDetail() {
   const [err, setErr] = useState("");
   const [subDesc, setSubDesc] = useState("");
   const [subPercent, setSubPercent] = useState(0);
-  const [commentText, setCommentText] = useState("");
   const [loading, setLoading] = useState(false);
+  const [updatingStatus, setUpdatingStatus] = useState(false);
+  const [activeTab, setActiveTab] = useState<TabKey>("submissions");
 
   const load = () => {
     if (!taskId) return;
@@ -72,25 +76,16 @@ export default function TaskDetail() {
     }
   };
 
-  const handleAddComment = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!taskId || !commentText.trim()) return;
-    try {
-      await api.post(`/api/comment/tasks/${taskId}/comments`, { text: commentText.trim() });
-      setCommentText("");
-      api.get<Comment[]>(`/api/comment/tasks/${taskId}/comments`).then((res) => setComments(res.data));
-    } catch (e) {
-      setErr(e instanceof Error ? e.message : "Failed");
-    }
-  };
-
   const handleStatusChange = async (status: string) => {
     if (!taskId) return;
+    setUpdatingStatus(true);
     try {
       await api.patch(`/api/tasks/${taskId}/status`, { status });
       api.get<Task>(`/api/tasks/${taskId}`).then((res) => setTask(res.data));
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Failed");
+    } finally {
+      setUpdatingStatus(false);
     }
   };
 
@@ -113,41 +108,128 @@ export default function TaskDetail() {
   const canSubmit = role === "EMPLOYEE" && task.status !== "APPROVED" && task.status !== "REJECTED";
   const canApproveReject = role === "ADMIN";
 
+  const formatDateTime = (value: string | null) =>
+    value ? new Date(value).toLocaleString() : "—";
+
+  const tabs: { key: TabKey; label: string }[] = [
+    { key: "submissions", label: "Submissions" },
+    { key: "comments", label: "Comments" },
+  ];
+
   return (
     <div>
       <div style={{ marginBottom: 24 }}>
         <Link to="/tasks" style={{ color: "var(--text-secondary)" }}>← Tasks</Link>
       </div>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 24 }}>
-        <div>
-          <h1 style={{ margin: "0 0 8px" }}>{task.title}</h1>
-          <div style={{ color: "var(--text-secondary)", fontSize: 14 }}>
-            {task.project?.title && <Link to={`/projects/${task.projectId}`}>{task.project.title}</Link>}
-            {" · "}{task.priority} · <span style={{ color: statusColors[task.status] }}>{task.status}</span>
+      {/* Top layout: overview + actions */}
+      <div style={{ display: "flex", gap: 16, marginBottom: 24, alignItems: "stretch" }}>
+        <Card style={{ flex: 1 }}>
+          <div style={{ marginBottom: 12 }}>
+            <h1 style={{ margin: "0 0 8px" }}>{task.title}</h1>
+            <div style={{ color: "var(--text-secondary)", fontSize: 14 }}>
+              {task.project?.title ? (
+                <>
+                  <Link to={`/projects/${task.projectId}`}>{task.project.title}</Link>
+                  {" · "}
+                </>
+              ) : null}
+              {task.priority} ·{" "}
+              <span style={{ color: statusColors[task.status] }}>{task.status}</span>
+            </div>
           </div>
-        </div>
-        {role === "ADMIN" && (
-          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-            <select
-              value={task.status}
-              onChange={(e) => handleStatusChange(e.target.value)}
-              style={{ padding: "6px 10px", borderRadius: 6, border: "1px solid var(--border)", background: "var(--bg-secondary)", color: "var(--text-primary)" }}
-            >
-              <option value="PENDING">PENDING</option>
-              <option value="IN_PROGRESS">IN_PROGRESS</option>
-              <option value="SUBMITTED">SUBMITTED</option>
-              <option value="APPROVED">APPROVED</option>
-              <option value="REJECTED">REJECTED</option>
-            </select>
-            <Button variant="danger" onClick={handleDelete} disabled={loading}>Delete</Button>
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))",
+              gap: 12,
+              fontSize: 13,
+              color: "var(--text-secondary)",
+            }}
+          >
+            <div>
+              <div style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: 0.4, color: "var(--text-muted)" }}>
+                Deadline
+              </div>
+              <div style={{ marginTop: 4 }}>{formatDateTime(task.deadline)}</div>
+            </div>
+            <div>
+              <div style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: 0.4, color: "var(--text-muted)" }}>
+                Created
+              </div>
+              <div style={{ marginTop: 4 }}>{formatDateTime(task.createdAt)}</div>
+            </div>
+            <div>
+              <div style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: 0.4, color: "var(--text-muted)" }}>
+                Progress
+              </div>
+              <div style={{ marginTop: 4 }}>{task.percentCompleted}%</div>
+            </div>
           </div>
-        )}
-      </div>
-      {task.description && (
-        <Card style={{ marginBottom: 24 }}>
-          <div style={{ color: "var(--text-secondary)", whiteSpace: "pre-wrap" }}>{task.description}</div>
+          {task.description && (
+            <div style={{ marginTop: 16 }}>
+              <div style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: 0.4, color: "var(--text-muted)", marginBottom: 4 }}>
+                Description
+              </div>
+              <div style={{ color: "var(--text-secondary)", whiteSpace: "pre-wrap" }}>{task.description}</div>
+            </div>
+          )}
         </Card>
-      )}
+
+        {/* Actions column */}
+        <Card
+          style={{
+            width: 260,
+            alignSelf: "stretch",
+            display: "flex",
+            flexDirection: "column",
+            gap: 12,
+          }}
+        >
+          {role === "ADMIN" && (
+            <>
+              <div>
+                <div style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: 0.4, color: "var(--text-muted)", marginBottom: 4 }}>
+                  Update status
+                </div>
+                <select
+                  value={task.status}
+                  onChange={(e) => handleStatusChange(e.target.value)}
+                  disabled={updatingStatus}
+                  style={{
+                    width: "100%",
+                    padding: "8px 10px",
+                    borderRadius: 6,
+                    border: "1px solid var(--border)",
+                    background: "var(--bg-secondary)",
+                    color: "var(--text-primary)",
+                  }}
+                >
+                  <option value="PENDING">PENDING</option>
+                  <option value="IN_PROGRESS">IN_PROGRESS</option>
+                  <option value="SUBMITTED">SUBMITTED</option>
+                  <option value="APPROVED">APPROVED</option>
+                  <option value="REJECTED">REJECTED</option>
+                </select>
+              </div>
+              <Button
+                variant="danger"
+                onClick={handleDelete}
+                disabled={loading}
+                style={{ width: "100%" }}
+              >
+                Delete task
+              </Button>
+            </>
+          )}
+          {role !== "ADMIN" && (
+            <div style={{ fontSize: 13, color: "var(--text-muted)" }}>
+              Status changes are managed by admins.
+            </div>
+          )}
+        </Card>
+      </div>
+
+      {/* Assignees */}
       <Card style={{ marginBottom: 24 }}>
         <h3 style={{ margin: "0 0 12px" }}>Assignees</h3>
         <ul style={{ margin: 0, paddingLeft: 20, color: "var(--text-secondary)" }}>
@@ -157,6 +239,8 @@ export default function TaskDetail() {
           {(!task.assignments || task.assignments.length === 0) && <li>None</li>}
         </ul>
       </Card>
+
+      {/* Submit work (employee) */}
       {canSubmit && (
         <Card style={{ marginBottom: 24 }}>
           <h3 style={{ margin: "0 0 12px" }}>Submit work</h3>
@@ -181,48 +265,91 @@ export default function TaskDetail() {
           </form>
         </Card>
       )}
-      <Card style={{ marginBottom: 24 }}>
-        <h3 style={{ margin: "0 0 12px" }}>Submissions</h3>
-        {submissions.length === 0 ? (
-          <p style={{ color: "var(--text-muted)", margin: 0 }}>No submissions yet.</p>
-        ) : (
-          <ul style={{ margin: 0, paddingLeft: 20 }}>
-            {submissions.map((s) => (
-              <li key={s.id} style={{ marginBottom: 8 }}>
-                {s.description} — {s.percentReported}% · {s.status} · by {s.submittedBy?.name ?? "—"}
-                {canApproveReject && s.status === "SUBMITTED" && (
-                  <span style={{ marginLeft: 8 }}>
-                    <Button variant="ghost" style={{ padding: "2px 8px", fontSize: 12 }} onClick={() => handleApprove(s.id)}>Approve</Button>
-                    <Button variant="danger" style={{ padding: "2px 8px", fontSize: 12, marginLeft: 4 }} onClick={() => handleReject(s.id)}>Reject</Button>
-                  </span>
-                )}
-              </li>
-            ))}
-          </ul>
-        )}
-      </Card>
-      <Card>
-        <h3 style={{ margin: "0 0 12px" }}>Comments</h3>
-        <form onSubmit={handleAddComment} style={{ marginBottom: 16 }}>
-          <textarea
-            value={commentText}
-            onChange={(e) => setCommentText(e.target.value)}
-            placeholder="Add a comment"
-            rows={2}
-            style={{ width: "100%", padding: "10px 12px", marginBottom: 8, border: "1px solid var(--border)", borderRadius: 6 }}
-          />
-          <Button type="submit">Post</Button>
-        </form>
-        <ul style={{ margin: 0, paddingLeft: 20 }}>
-          {comments.map((c) => (
-            <li key={c.id} style={{ marginBottom: 8 }}>
-              <strong>{c.author?.name ?? "—"}</strong>: {c.text}
-              <div style={{ fontSize: 12, color: "var(--text-muted)" }}>{new Date(c.createdAt).toLocaleString()}</div>
-            </li>
-          ))}
-          {comments.length === 0 && <li style={{ color: "var(--text-muted)" }}>No comments yet.</li>}
-        </ul>
-      </Card>
+
+      {/* Tabs for submissions & comments */}
+      <div style={{ marginBottom: 16, borderBottom: "1px solid var(--border)" }}>
+        <div style={{ display: "flex", gap: 4 }}>
+          {tabs.map((tab) => {
+            const active = activeTab === tab.key;
+            return (
+              <button
+                key={tab.key}
+                type="button"
+                onClick={() => setActiveTab(tab.key)}
+                style={{
+                  border: "none",
+                  borderBottom: active ? "2px solid var(--accent)" : "2px solid transparent",
+                  background: "transparent",
+                  padding: "8px 12px",
+                  cursor: "pointer",
+                  fontSize: 14,
+                  color: active ? "var(--text-primary)" : "var(--text-secondary)",
+                  fontWeight: active ? 600 : 500,
+                }}
+              >
+                {tab.label}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {activeTab === "submissions" && (
+        <Card style={{ marginBottom: 24 }}>
+          <h3 style={{ margin: "0 0 12px" }}>Submissions</h3>
+          {submissions.length === 0 ? (
+            <p style={{ color: "var(--text-muted)", margin: 0 }}>No submissions yet.</p>
+          ) : (
+            <ul style={{ margin: 0, paddingLeft: 20 }}>
+              {submissions.map((s) => (
+                <li key={s.id} style={{ marginBottom: 8 }}>
+                  {s.description} — {s.percentReported}% · {s.status} · by {s.submittedBy?.name ?? "—"}
+                  {canApproveReject && s.status === "SUBMITTED" && (
+                    <span style={{ marginLeft: 8 }}>
+                      <Button
+                        variant="ghost"
+                        style={{ padding: "2px 8px", fontSize: 12 }}
+                        onClick={() => handleApprove(s.id)}
+                      >
+                        Approve
+                      </Button>
+                      <Button
+                        variant="danger"
+                        style={{ padding: "2px 8px", fontSize: 12, marginLeft: 4 }}
+                        onClick={() => handleReject(s.id)}
+                      >
+                        Reject
+                      </Button>
+                    </span>
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
+        </Card>
+      )}
+
+      {activeTab === "comments" && (
+        <CommentSection
+          comments={comments}
+          canReply={true}
+          canAddComment={true}
+          placeholder="Add a comment..."
+          addCommentLabel="Comment"
+          onAddComment={async (text) => {
+            if (!taskId) return;
+            await api.post(`/api/comment/tasks/${taskId}/comments`, { text });
+          }}
+          onReply={async (parentId, text) => {
+            await api.post(`/api/comment/${parentId}/reply`, { text });
+          }}
+          onRefresh={async () => {
+            if (!taskId) return;
+            const res = await api.get<Comment[]>(`/api/comment/tasks/${taskId}/comments`);
+            setComments(res.data);
+          }}
+        />
+      )}
     </div>
   );
 }

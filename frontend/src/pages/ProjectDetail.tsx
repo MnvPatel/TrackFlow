@@ -4,6 +4,7 @@ import { api } from "../lib/axios";
 import type { Project, Comment } from "../types";
 import Card from "../components/Card";
 import Button from "../components/Button";
+import CommentSection from "../components/CommentSection";
 import { useAuth } from "../context/AuthContext";
 
 const statusColors: Record<string, string> = {
@@ -24,7 +25,6 @@ export default function ProjectDetail() {
    const [updatingStatus, setUpdatingStatus] = useState(false);
   const [activeTab, setActiveTab] = useState<TabKey>("tasks");
   const [comments, setComments] = useState<Comment[]>([]);
-  const [commentText, setCommentText] = useState("");
   const [loadingComments, setLoadingComments] = useState(false);
 
   useEffect(() => {
@@ -82,7 +82,6 @@ export default function ProjectDetail() {
   const tabs: { key: TabKey; label: string }[] = [
     { key: "tasks", label: "Tasks" },
     { key: "issues", label: "Issues" },
-    { key: "submissions", label: "Submissions" },
     { key: "comments", label: "Comments" },
   ];
 
@@ -293,79 +292,31 @@ export default function ProjectDetail() {
         </Card>
       )}
 
-      {activeTab === "submissions" && (
-        <Card>
-          <h2 style={{ margin: "0 0 16px", fontSize: "1.1rem" }}>Submissions</h2>
-          <p style={{ color: "var(--text-muted)", margin: 0 }}>
-            For now, view submissions from the Submissions tab or individual tasks. We can wire a
-            project-level submissions view next.
-          </p>
-        </Card>
-      )}
-
       {activeTab === "comments" && (
-        <Card>
-          <h2 style={{ margin: "0 0 16px", fontSize: "1.1rem" }}>Project comments</h2>
-          <p style={{ marginTop: 0, fontSize: 13, color: "var(--text-muted)" }}>
-            Private thread between admin and employees. Clients cannot see these comments.
-          </p>
-          {role !== "CLIENT" && (
-            <form
-              onSubmit={async (e) => {
-                e.preventDefault();
-                if (!project || !commentText.trim()) return;
-                try {
-                  await api.post(`/api/comment/projects/${project.id}/comments`, {
-                    text: commentText.trim(),
-                  });
-                  setCommentText("");
-                  const res = await api.get<Comment[]>(
-                    `/api/comment/projects/${project.id}/comments`
-                  );
-                  setComments(res.data);
-                } catch (e) {
-                  setErr(e instanceof Error ? e.message : "Failed to add comment");
-                }
-              }}
-              style={{ marginBottom: 16 }}
-            >
-              <textarea
-                value={commentText}
-                onChange={(e) => setCommentText(e.target.value)}
-                placeholder="Add an internal project note"
-                rows={3}
-                style={{
-                  width: "100%",
-                  padding: "10px 12px",
-                  marginBottom: 8,
-                  border: "1px solid var(--border)",
-                  borderRadius: 6,
-                  background: "var(--bg-secondary)",
-                  color: "var(--text-primary)",
-                }}
-              />
-              <Button type="submit">Post comment</Button>
-            </form>
-          )}
-          {loadingComments ? (
-            <p>Loading comments…</p>
-          ) : comments.length === 0 ? (
-            <p style={{ color: "var(--text-muted)", margin: 0 }}>No comments yet.</p>
-          ) : (
-            <ul style={{ margin: 0, paddingLeft: 20 }}>
-              {comments.map((c) => (
-                <li key={c.id} style={{ marginBottom: 8 }}>
-                  <div style={{ fontSize: 13 }}>
-                    <strong>{c.author?.name ?? "Unknown"}</strong>: {c.text}
-                  </div>
-                  <div style={{ fontSize: 11, color: "var(--text-muted)" }}>
-                    {new Date(c.createdAt).toLocaleString()}
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
-        </Card>
+        <CommentSection
+          comments={comments}
+          loading={loadingComments}
+          canReply={role !== "CLIENT"}
+          canAddComment={role !== "CLIENT"}
+          placeholder="Add a comment..."
+          addCommentLabel="Comment"
+          title="Project comments"
+          subtitle="Private thread between admin and employees. Clients cannot see these comments."
+          onAddComment={async (text) => {
+            if (!project) return;
+            await api.post(`/api/comment/projects/${project.id}/comments`, { text });
+          }}
+          onReply={async (parentId, text) => {
+            await api.post(`/api/comment/${parentId}/reply`, { text });
+          }}
+          onRefresh={async () => {
+            if (!project) return;
+            const res = await api.get<Comment[]>(
+              `/api/comment/projects/${project.id}/comments`
+            );
+            setComments(res.data);
+          }}
+        />
       )}
     </div>
   );

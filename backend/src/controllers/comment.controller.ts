@@ -132,44 +132,20 @@ export const getTaskComments = async (req: any, res: Response) => {
       return res.sendStatus(403);
     }
 
-    const cacheKey = `taskComments:${taskId}:${role}:${id}`;
-
-    const cached = await getCache(cacheKey);
-    if (cached) {
-      return res.json(cached);
-    }
-
-    const comments = await prisma.comment.findMany({
+    const flatComments = await prisma.comment.findMany({
       where: {
         taskId,
-        parentCommentId: null,
       },
       select: {
         id: true,
         text: true,
         createdAt: true,
+        parentCommentId: true,
         author: {
           select: {
             id: true,
             name: true,
             email: true,
-          },
-        },
-        replies: {
-          select: {
-            id: true,
-            text: true,
-            createdAt: true,
-            author: {
-              select: {
-                id: true,
-                name: true,
-                email: true,
-              },
-            },
-          },
-          orderBy: {
-            createdAt: "asc",
           },
         },
       },
@@ -178,9 +154,36 @@ export const getTaskComments = async (req: any, res: Response) => {
       },
     });
 
-    await setCache(cacheKey, comments, 300);
+    type CommentNode = {
+      id: string;
+      text: string;
+      createdAt: Date;
+      author: {
+        id: string;
+        name: string;
+        email: string;
+      };
+      replies: CommentNode[];
+    };
 
-    return res.json(comments);
+    const byId = new Map<string, CommentNode>();
+    const roots: CommentNode[] = [];
+
+    flatComments.forEach((c) => {
+      byId.set(c.id, { ...c, replies: [] });
+    });
+
+    flatComments.forEach((c) => {
+      const node = byId.get(c.id)!;
+      if (c.parentCommentId) {
+        const parent = byId.get(c.parentCommentId);
+        if (parent) parent.replies.push(node);
+      } else {
+        roots.push(node);
+      }
+    });
+
+    return res.json(roots);
   } catch (error) {
     console.error(error);
     return res.status(500).json({
@@ -315,44 +318,20 @@ export const getProjectComments = async (req: any, res: Response) => {
       return res.sendStatus(403);
     }
 
-    const cacheKey = `projectComments:${projectId}:${role}:${id}`;
-
-    const cached = await getCache(cacheKey);
-    if (cached) {
-      return res.json(cached);
-    }
-
-    const comments = await prisma.comment.findMany({
+    const flatComments = await prisma.comment.findMany({
       where: {
         projectId,
-        parentCommentId: null,
       },
       select: {
         id: true,
         text: true,
         createdAt: true,
+        parentCommentId: true,
         author: {
           select: {
             id: true,
             name: true,
             email: true,
-          },
-        },
-        replies: {
-          select: {
-            id: true,
-            text: true,
-            createdAt: true,
-            author: {
-              select: {
-                id: true,
-                name: true,
-                email: true,
-              },
-            },
-          },
-          orderBy: {
-            createdAt: "asc",
           },
         },
       },
@@ -361,9 +340,36 @@ export const getProjectComments = async (req: any, res: Response) => {
       },
     });
 
-    await setCache(cacheKey, comments, 300);
+    type CommentNode = {
+      id: string;
+      text: string;
+      createdAt: Date;
+      author: {
+        id: string;
+        name: string;
+        email: string;
+      };
+      replies: CommentNode[];
+    };
 
-    return res.json(comments);
+    const byId = new Map<string, CommentNode>();
+    const roots: CommentNode[] = [];
+
+    flatComments.forEach((c) => {
+      byId.set(c.id, { ...c, replies: [] });
+    });
+
+    flatComments.forEach((c) => {
+      const node = byId.get(c.id)!;
+      if (c.parentCommentId) {
+        const parent = byId.get(c.parentCommentId);
+        if (parent) parent.replies.push(node);
+      } else {
+        roots.push(node);
+      }
+    });
+
+    return res.json(roots);
   } catch (error) {
     console.error("Get Project Comments Error:", error);
     return res.status(500).json({
