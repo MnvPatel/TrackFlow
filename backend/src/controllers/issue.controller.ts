@@ -81,6 +81,7 @@ export const getProjectIssues = async (req: any, res: Response) => {
 
     const project = await prisma.project.findUnique({
       where: { id: projectId },
+      include: { members: true },
     });
 
     if (!project) {
@@ -89,27 +90,25 @@ export const getProjectIssues = async (req: any, res: Response) => {
       });
     }
 
+    // RBAC: 
+    // - ADMIN: can see all project issues
+    // - CLIENT: only issues for their own projects
+    // - EMPLOYEE: only if they are a member of the project
     if (role === "CLIENT" && project.clientId !== id) {
       return res.sendStatus(403);
     }
 
-    if (role !== "ADMIN" && role !== "CLIENT") {
+    if (
+      role === "EMPLOYEE" &&
+      !project.members.some((m) => m.userId === id)
+    ) {
       return res.sendStatus(403);
-    }
-
-    const cacheKey = `issues:${projectId}:${role}:${id}`;
-
-    const cached = await getCache(cacheKey);
-    if (cached) {
-      return res.json(cached);
     }
 
     const issues = await prisma.issue.findMany({
       where: { projectId },
       orderBy: { createdAt: "desc" },
     });
-
-    await setCache(cacheKey, issues, 300);
 
     return res.json(issues);
   } catch (error) {
@@ -128,7 +127,11 @@ export const getIssueById = async (req: any, res: Response) => {
     const issue = await prisma.issue.findUnique({
       where: { id: issueId },
       include: {
-        project: true,
+        project: {
+          include: {
+            members: true,
+          },
+        },
         convertedTask: {
           select: {
             id: true,
@@ -145,22 +148,20 @@ export const getIssueById = async (req: any, res: Response) => {
       });
     }
 
+    // RBAC:
+    // - ADMIN: can see any issue
+    // - CLIENT: only issues for their own projects
+    // - EMPLOYEE: only if they are a member of the project
     if (role === "CLIENT" && issue.project.clientId !== id) {
       return res.sendStatus(403);
     }
 
-    if (role !== "ADMIN" && role !== "CLIENT") {
+    if (
+      role === "EMPLOYEE" &&
+      !issue.project.members.some((m) => m.userId === id)
+    ) {
       return res.sendStatus(403);
     }
-
-    const cacheKey = `issue:${issueId}:${role}:${id}`;
-
-    const cached = await getCache(cacheKey);
-    if (cached) {
-      return res.json(cached);
-    }
-
-    await setCache(cacheKey, issue, 300);
 
     return res.json(issue);
   } catch (error) {
@@ -198,12 +199,30 @@ export const convertIssueToTask = async (req: any, res: Response) => {
       });
     }
 
+    // Basic validation of priority
+    const validPriorities = ["LOW", "MEDIUM", "HIGH"];
+    if (!priority || !validPriorities.includes(priority)) {
+      return res.status(400).json({
+        message: "Priority must be LOW, MEDIUM, or HIGH",
+      });
+    }
+
+    // Parse optional deadline (string -> Date)
+    let deadlineDate: Date | undefined;
+    if (deadline != null && String(deadline).trim() !== "") {
+      const d = new Date(deadline as string);
+      if (isNaN(d.getTime())) {
+        return res.status(400).json({ message: "Invalid deadline" });
+      }
+      deadlineDate = d;
+    }
+
     const task = await prisma.task.create({
       data: {
         title: issue.title,
         description: issue.description,
         priority,
-        deadline,
+        ...(deadlineDate !== undefined && { deadline: deadlineDate }),
         projectId: issue.projectId,
         createdById: id,
         assignments: {

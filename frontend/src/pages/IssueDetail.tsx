@@ -21,18 +21,9 @@ export default function IssueDetail() {
       .catch((e) => setErr(e instanceof Error ? e.message : "Failed"));
   }, [issueId]);
 
-  const handleConvert = async () => {
-    if (!issueId || !window.confirm("Convert this issue to a task?")) return;
-    setLoading(true);
-    try {
-      await api.patch(`/api/issues/${issueId}/convert`);
-      setIssue((prev) => (prev ? { ...prev, status: "CONVERTED_TO_TASK" } : null));
-      navigate("/tasks");
-    } catch (e) {
-      setErr(e instanceof Error ? e.message : "Convert failed");
-    } finally {
-      setLoading(false);
-    }
+  const handleConvert = () => {
+    if (!issueId) return;
+    navigate(`/issues/${issueId}/convert`);
   };
 
   if (err && !issue) return <p style={{ color: "var(--danger)" }}>{err}</p>;
