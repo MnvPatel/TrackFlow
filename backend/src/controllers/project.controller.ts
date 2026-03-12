@@ -214,7 +214,8 @@ export const getProjectById = async (req: any, res: Response) => {
   const { projectId } = req.params;
   const { id, role } = req.user;
 
-  const cacheKey = `project:${projectId}:${role}:${id}`;
+  // ADMIN shares one cache key per project so invalidation (e.g. on task create) works
+  const cacheKey = role === "ADMIN" ? `project:${projectId}:ADMIN` : `project:${projectId}:${role}:${id}`;
 
   const cached = await getCache(cacheKey);
   if (cached) {
@@ -244,6 +245,16 @@ export const getProjectById = async (req: any, res: Response) => {
           status: true,
           priority: true,
           deadline: true,
+          percentCompleted: true,
+          createdAt: true,
+          projectId: true,
+          assignments: {
+            select: {
+              user: {
+                select: { id: true, name: true, email: true },
+              },
+            },
+          },
         },
       },
 

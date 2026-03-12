@@ -20,6 +20,7 @@
     "@types/bcrypt": "^6.0.0",
     "@types/cookie-parser": "^1.4.10",
     "@types/jsonwebtoken": "^9.0.10",
+    "@types/multer": "^2.1.0",
     "@types/nodemailer": "^7.0.9",
     "prisma": "^6.19.2",
     "prisma-erd-generator": "^2.4.2",
@@ -38,6 +39,7 @@
     "express": "^5.2.1",
     "ioredis": "^5.9.2",
     "jsonwebtoken": "^9.0.3",
+    "multer": "^2.1.1",
     "nodemailer": "^7.0.13",
     "redis": "^5.11.0"
   }

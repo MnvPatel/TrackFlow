@@ -1,10 +1,11 @@
 import React, { useEffect, useState } from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
 import { api } from "../lib/axios";
-import type { Project, Comment } from "../types";
+import type { Project, Comment, Task, Issue } from "../types";
 import Card from "../components/Card";
 import Button from "../components/Button";
 import CommentSection from "../components/CommentSection";
+import TaskCard from "../components/TaskCard";
 import { useAuth } from "../context/AuthContext";
 
 const statusColors: Record<string, string> = {
@@ -26,6 +27,9 @@ export default function ProjectDetail() {
   const [activeTab, setActiveTab] = useState<TabKey>("tasks");
   const [comments, setComments] = useState<Comment[]>([]);
   const [loadingComments, setLoadingComments] = useState(false);
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [issues, setIssues] = useState<Issue[]>([]);
+  const [loadingIssues, setLoadingIssues] = useState(false);
 
   useEffect(() => {
     if (!projectId || projectId === "undefined") {
@@ -33,9 +37,20 @@ export default function ProjectDetail() {
       return;
     }
     api.get<Project>(`/api/projects/${projectId}`)
-      .then((res) => setProject(res.data))
+      .then((res) => {
+        setProject(res.data);
+      })
       .catch((e) => setErr(e instanceof Error ? e.message : "Failed"));
   }, [projectId, navigate]);
+
+  // Always fetch tasks for this project from dedicated endpoint (fresh after conversions)
+  useEffect(() => {
+    if (!projectId) return;
+    api
+      .get<Task[]>(`/api/tasks/projects/${projectId}/tasks`)
+      .then((res) => setTasks(res.data))
+      .catch(() => setTasks([]));
+  }, [projectId]);
 
   useEffect(() => {
     if (!project || activeTab !== "comments") return;
@@ -45,6 +60,16 @@ export default function ProjectDetail() {
       .then((res) => setComments(res.data))
       .catch(() => setComments([]))
       .finally(() => setLoadingComments(false));
+  }, [project, activeTab]);
+
+  useEffect(() => {
+    if (!project || activeTab !== "issues") return;
+    setLoadingIssues(true);
+    api
+      .get<Issue[]>(`/api/issues/projects/${project.id}/issues`)
+      .then((res) => setIssues(res.data))
+      .catch(() => setIssues([]))
+      .finally(() => setLoadingIssues(false));
   }, [project, activeTab]);
 
   const handleStatusChange = async (status: Project["status"]) => {
@@ -241,17 +266,18 @@ export default function ProjectDetail() {
       {activeTab === "tasks" && (
         <Card>
           <h2 style={{ margin: "0 0 16px", fontSize: "1.1rem" }}>Tasks</h2>
-          {project.tasks && project.tasks.length > 0 ? (
-            <ul style={{ margin: 0, paddingLeft: 20 }}>
-              {project.tasks.map((t) => (
-                <li key={t.id} style={{ marginBottom: 8 }}>
-                  <Link to={`/tasks/${t.id}`}>{t.title}</Link>
-                  <span style={{ marginLeft: 8, color: "var(--text-muted)", fontSize: 14 }}>
-                    {t.status} · {t.priority}
-                  </span>
-                </li>
+          {tasks.length > 0 ? (
+            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+              {tasks.map((t) => (
+                <TaskCard
+                  key={t.id}
+                  task={t as Task}
+                  showProject={false}
+                  showPercent={true}
+                  showAssignees={true}
+                />
               ))}
-            </ul>
+            </div>
           ) : (
             <p style={{ color: "var(--text-muted)", margin: 0 }}>No tasks yet.</p>
           )}
@@ -268,9 +294,11 @@ export default function ProjectDetail() {
       {activeTab === "issues" && (
         <Card>
           <h2 style={{ margin: "0 0 16px", fontSize: "1.1rem" }}>Issues</h2>
-          {project.issues && project.issues.length > 0 ? (
+          {loadingIssues ? (
+            <p>Loading issues…</p>
+          ) : issues.length > 0 ? (
             <ul style={{ margin: 0, paddingLeft: 20 }}>
-              {project.issues.map((i) => (
+              {issues.map((i) => (
                 <li key={i.id} style={{ marginBottom: 8 }}>
                   <Link to={`/issues/${i.id}`}>{i.title}</Link>
                   <span style={{ marginLeft: 8, color: "var(--text-muted)", fontSize: 14 }}>

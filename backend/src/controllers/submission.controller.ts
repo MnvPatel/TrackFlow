@@ -2,12 +2,53 @@ import { Response } from "express";
 import prisma from "../prisma";
 import { deleteCache, getCache, setCache } from "../utils/cache";
 import { createBulkNotification, createNotification } from "../services/notification.service";
+import { uploadToCloudinary } from "../utils/cloudinary";
 
 export const submitWork = async (req: any, res: Response) => {
   try {
     const { taskId } = req.params;
-    const { description, percentReported, media = [] } = req.body;
     const employeeId = req.user.id;
+
+    // Support both JSON body and multipart (multer puts text in req.body)
+    let description: string =
+      typeof req.body?.description === "string"
+        ? req.body.description.trim()
+        : "";
+    let percentReported: number =
+      typeof req.body?.percentReported === "number"
+        ? req.body.percentReported
+        : Number(req.body?.percentReported);
+
+    if (!description) {
+      return res.status(400).json({ message: "Description is required" });
+    }
+    if (Number.isNaN(percentReported) || percentReported < 0 || percentReported > 100) {
+      return res.status(400).json({
+        message: "Percent must be a number between 0 and 100",
+      });
+    }
+
+    let media: { mediaUrl: string; mediaType: "IMAGE" | "VIDEO" }[] = [];
+
+    // If files were uploaded (multipart), upload to Cloudinary
+    const files = req.files?.media;
+    if (Array.isArray(files) && files.length > 0) {
+      for (const file of files) {
+        if (file.buffer && file.mimetype) {
+          const result = await uploadToCloudinary(
+            file.buffer,
+            file.mimetype,
+            "task_submissions"
+          );
+          media.push(result);
+        }
+      }
+    } else if (Array.isArray(req.body?.media)) {
+      // JSON body: use provided media URLs (e.g. from a separate upload step)
+      media = req.body.media
+        .filter((m: any) => m?.mediaUrl && (m?.mediaType === "IMAGE" || m?.mediaType === "VIDEO"))
+        .map((m: any) => ({ mediaUrl: m.mediaUrl, mediaType: m.mediaType }));
+    }
 
     const task = await prisma.task.findUnique({
       where: { id: taskId },
@@ -43,12 +84,6 @@ export const submitWork = async (req: any, res: Response) => {
       });
     }
 
-    if (percentReported < 0 || percentReported > 100) {
-      return res.status(400).json({
-        message: "Percent must be between 0 and 100",
-      });
-    }
-
     const lastSubmission = await prisma.workSubmission.findFirst({
       where: {
         taskId,
@@ -72,7 +107,7 @@ export const submitWork = async (req: any, res: Response) => {
         submittedById: employeeId,
         status: "SUBMITTED",
         media: {
-          create: media.map((m: any) => ({
+          create: media.map((m) => ({
             mediaUrl: m.mediaUrl,
             mediaType: m.mediaType,
           })),
@@ -95,7 +130,7 @@ export const submitWork = async (req: any, res: Response) => {
       select: { id: true },
     });
 
-    //Cache Invalidation
+    //Cache Invalidation (including submissions list so getSubmissions returns all)
     const assignedUserIds = task.assignments.map(
       (a) => a.userId
     );
@@ -119,6 +154,10 @@ export const submitWork = async (req: any, res: Response) => {
         (id) =>
           `project:${task.projectId}:EMPLOYEE:${id}`
       ),
+
+      `submissions:${taskId}:CLIENT:${task.project.clientId}`,
+      ...assignedUserIds.map((id) => `submissions:${taskId}:EMPLOYEE:${id}`),
+      ...admins.map((a) => `submissions:${taskId}:ADMIN:${a.id}`),
     ]);
 
     await createNotification({
@@ -188,7 +227,7 @@ export const approveSubmission = async (req: any, res: Response) => {
           status: "APPROVED",
         },
       });
-      
+
     let taskPercent = approvedSubmissions.reduce(
       (sum, s) => sum + s.percentReported,
       0
@@ -200,21 +239,14 @@ export const approveSubmission = async (req: any, res: Response) => {
       (a) => a.userId
     );
 
-    const approvedUserIds = approvedSubmissions.map(
-      (s) => s.submittedById
-    );
-
-    const allApproved = assignedUserIds.every((id) =>
-      approvedUserIds.includes(id)
-    );
-
+    // Update task percentCompleted only; do NOT set task status to APPROVED.
+    // Task stays IN_PROGRESS so multiple employees can keep submitting.
+    // Only admin can set task status to APPROVED (completed) to stop submissions.
     await prisma.task.update({
       where: { id: task.id },
       data: {
         percentCompleted: taskPercent,
-        status: allApproved
-          ? "APPROVED"
-          : "IN_PROGRESS",
+        status: "IN_PROGRESS",
       },
     });
     
@@ -237,7 +269,11 @@ export const approveSubmission = async (req: any, res: Response) => {
       },
     });
 
-    //Cache Invalidation
+    //Cache Invalidation (including submissions list cache so UI refreshes)
+    const admins = await prisma.user.findMany({
+      where: { role: "ADMIN" },
+      select: { id: true },
+    });
     await deleteCache([
       "tasks:ADMIN",
       `tasks:CLIENT:${project.clientId}`,
@@ -257,6 +293,10 @@ export const approveSubmission = async (req: any, res: Response) => {
         (id) =>
           `project:${project.id}:EMPLOYEE:${id}`
       ),
+
+      `submissions:${task.id}:CLIENT:${project.clientId}`,
+      ...assignedUserIds.map((id) => `submissions:${task.id}:EMPLOYEE:${id}`),
+      ...admins.map((a) => `submissions:${task.id}:ADMIN:${a.id}`),
     ]);
 
     await createNotification({
@@ -349,30 +389,37 @@ export const rejectSubmission = async (req: any, res: Response) => {
       },
     });
 
-    //Cache Invalidation
-    const assignedUserIds = task.assignments.map(
+    //Cache Invalidation (including submissions list cache so UI refreshes)
+    const assignedUserIdsReject = task.assignments.map(
       (a) => a.userId
     );
-
+    const adminsReject = await prisma.user.findMany({
+      where: { role: "ADMIN" },
+      select: { id: true },
+    });
     await deleteCache([
       "tasks:ADMIN",
       `tasks:CLIENT:${project.clientId}`,
-      ...assignedUserIds.map(
+      ...assignedUserIdsReject.map(
         (id) => `tasks:EMPLOYEE:${id}`
       ),
 
       `task:${task.id}:ADMIN`,
       `task:${task.id}:CLIENT:${project.clientId}`,
-      ...assignedUserIds.map(
+      ...assignedUserIdsReject.map(
         (id) => `task:${task.id}:EMPLOYEE:${id}`
       ),
 
       `project:${project.id}:ADMIN`,
       `project:${project.id}:CLIENT:${project.clientId}`,
-      ...assignedUserIds.map(
+      ...assignedUserIdsReject.map(
         (id) =>
           `project:${project.id}:EMPLOYEE:${id}`
       ),
+
+      `submissions:${task.id}:CLIENT:${project.clientId}`,
+      ...assignedUserIdsReject.map((id) => `submissions:${task.id}:EMPLOYEE:${id}`),
+      ...adminsReject.map((a) => `submissions:${task.id}:ADMIN:${a.id}`),
     ]);
 
     await createNotification({

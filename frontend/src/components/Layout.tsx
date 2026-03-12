@@ -10,6 +10,7 @@ const navByRole: Record<Role, { to: string; label: string }[]> = {
     { to: "/", label: "Dashboard" },
     { to: "/projects", label: "Projects" },
     { to: "/tasks", label: "Tasks" },
+    { to: "/issues", label: "Issues" },
     { to: "/employees", label: "Employees" },
     { to: "/submissions", label: "Submissions" },
   ],
@@ -17,6 +18,7 @@ const navByRole: Record<Role, { to: string; label: string }[]> = {
     { to: "/", label: "Dashboard" },
     { to: "/projects", label: "Projects" },
     { to: "/tasks", label: "My Tasks" },
+    { to: "/issues", label: "Issues" },
     { to: "/submissions", label: "Submissions" },
   ],
   CLIENT: [

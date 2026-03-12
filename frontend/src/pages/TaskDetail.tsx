@@ -27,15 +27,19 @@ export default function TaskDetail() {
   const [err, setErr] = useState("");
   const [subDesc, setSubDesc] = useState("");
   const [subPercent, setSubPercent] = useState(0);
+  const [subMediaFiles, setSubMediaFiles] = useState<File[]>([]);
   const [loading, setLoading] = useState(false);
   const [updatingStatus, setUpdatingStatus] = useState(false);
+  const [submissionActionId, setSubmissionActionId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<TabKey>("submissions");
 
   const load = () => {
-    if (!taskId) return;
-    api.get<Task>(`/api/tasks/${taskId}`).then((res) => setTask(res.data)).catch((e) => setErr(e instanceof Error ? e.message : "Failed"));
-    api.get<WorkSubmission[]>(`/api/submission/tasks/${taskId}/submissions`).then((res) => setSubmissions(res.data)).catch(() => {});
-    api.get<Comment[]>(`/api/comment/tasks/${taskId}/comments`).then((res) => setComments(res.data)).catch(() => {});
+    if (!taskId) return Promise.resolve();
+    return Promise.all([
+      api.get<Task>(`/api/tasks/${taskId}`).then((res) => setTask(res.data)).catch((e) => setErr(e instanceof Error ? e.message : "Failed")),
+      api.get<WorkSubmission[]>(`/api/submission/tasks/${taskId}/submissions`).then((res) => setSubmissions(res.data)).catch(() => {}),
+      api.get<Comment[]>(`/api/comment/tasks/${taskId}/comments`).then((res) => setComments(res.data)).catch(() => {}),
+    ]);
   };
 
   useEffect(() => {
@@ -46,10 +50,23 @@ export default function TaskDetail() {
     e.preventDefault();
     if (!taskId) return;
     setLoading(true);
+    setErr("");
     try {
-      await api.post(`/api/submission/tasks/${taskId}/submit`, { description: subDesc, percentReported: subPercent });
+      if (subMediaFiles.length > 0) {
+        const form = new FormData();
+        form.append("description", subDesc);
+        form.append("percentReported", String(subPercent));
+        subMediaFiles.forEach((file) => form.append("media", file));
+        await api.post(`/api/submission/tasks/${taskId}/submit`, form);
+      } else {
+        await api.post(`/api/submission/tasks/${taskId}/submit`, {
+          description: subDesc,
+          percentReported: subPercent,
+        });
+      }
       setSubDesc("");
       setSubPercent(0);
+      setSubMediaFiles([]);
       load();
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Submit failed");
@@ -59,20 +76,28 @@ export default function TaskDetail() {
   };
 
   const handleApprove = async (subId: string) => {
+    setSubmissionActionId(subId);
+    setErr("");
     try {
       await api.patch(`/api/submission/${subId}/approve`);
-      load();
+      await load();
     } catch (e) {
-      setErr(e instanceof Error ? e.message : "Failed");
+      setErr(e instanceof Error ? e.message : "Approval failed");
+    } finally {
+      setSubmissionActionId(null);
     }
   };
 
   const handleReject = async (subId: string) => {
+    setSubmissionActionId(subId);
+    setErr("");
     try {
       await api.patch(`/api/submission/${subId}/reject`);
-      load();
+      await load();
     } catch (e) {
-      setErr(e instanceof Error ? e.message : "Failed");
+      setErr(e instanceof Error ? e.message : "Rejection failed");
+    } finally {
+      setSubmissionActionId(null);
     }
   };
 
@@ -221,7 +246,16 @@ export default function TaskDetail() {
               </Button>
             </>
           )}
-          {role !== "ADMIN" && (
+          {role === "EMPLOYEE" && task.status === "PENDING" && (
+            <Button
+              onClick={() => handleStatusChange("IN_PROGRESS")}
+              disabled={updatingStatus}
+              style={{ width: "100%" }}
+            >
+              {updatingStatus ? "Starting…" : "Start task"}
+            </Button>
+          )}
+          {role !== "ADMIN" && !(role === "EMPLOYEE" && task.status === "PENDING") && (
             <div style={{ fontSize: 13, color: "var(--text-muted)" }}>
               Status changes are managed by admins.
             </div>
@@ -244,6 +278,9 @@ export default function TaskDetail() {
       {canSubmit && (
         <Card style={{ marginBottom: 24 }}>
           <h3 style={{ margin: "0 0 12px" }}>Submit work</h3>
+          {err && (
+            <p style={{ color: "var(--danger)", marginBottom: 12, fontSize: 14 }}>{err}</p>
+          )}
           <form onSubmit={handleSubmitWork}>
             <input
               placeholder="Description"
@@ -256,11 +293,29 @@ export default function TaskDetail() {
               type="number"
               min={0}
               max={100}
-              value={subPercent || ""}
-              onChange={(e) => setSubPercent(Number(e.target.value))}
-              placeholder="Percent"
-              style={{ width: "100%", padding: "10px 12px", marginBottom: 12, border: "1px solid var(--border)", borderRadius: 6 }}
+              value={subPercent ?? ""}
+              onChange={(e) => setSubPercent(Number(e.target.value) || 0)}
+              placeholder="Percent (0–100)"
+              required
+              style={{ width: "100%", padding: "10px 12px", marginBottom: 8, border: "1px solid var(--border)", borderRadius: 6 }}
             />
+            <div style={{ marginBottom: 12 }}>
+              <label style={{ display: "block", fontSize: 13, marginBottom: 4, color: "var(--text-secondary)" }}>
+                Media (images/videos, optional)
+              </label>
+              <input
+                type="file"
+                accept="image/*,video/*"
+                multiple
+                onChange={(e) => setSubMediaFiles(e.target.files ? Array.from(e.target.files) : [])}
+                style={{ width: "100%", fontSize: 13 }}
+              />
+              {subMediaFiles.length > 0 && (
+                <p style={{ margin: "4px 0 0", fontSize: 12, color: "var(--text-muted)" }}>
+                  {subMediaFiles.length} file(s) selected. They will be uploaded to Cloudinary on submit.
+                </p>
+              )}
+            </div>
             <Button type="submit" disabled={loading}>{loading ? "Submitting…" : "Submit"}</Button>
           </form>
         </Card>
@@ -297,6 +352,9 @@ export default function TaskDetail() {
       {activeTab === "submissions" && (
         <Card style={{ marginBottom: 24 }}>
           <h3 style={{ margin: "0 0 12px" }}>Submissions</h3>
+          {err && (
+            <p style={{ color: "var(--danger)", marginBottom: 12, fontSize: 14 }}>{err}</p>
+          )}
           {submissions.length === 0 ? (
             <p style={{ color: "var(--text-muted)", margin: 0 }}>No submissions yet.</p>
           ) : (
@@ -304,21 +362,35 @@ export default function TaskDetail() {
               {submissions.map((s) => (
                 <li key={s.id} style={{ marginBottom: 8 }}>
                   {s.description} — {s.percentReported}% · {s.status} · by {s.submittedBy?.name ?? "—"}
+                  {s.media && s.media.length > 0 && (
+                    <span style={{ marginLeft: 8, fontSize: 12, color: "var(--text-muted)" }}>
+                      · {s.media.length} attachment(s):{" "}
+                      {s.media.map((m, i) => (
+                        <a key={i} href={m.mediaUrl} target="_blank" rel="noopener noreferrer" style={{ marginRight: 8 }}>
+                          {m.mediaType}
+                        </a>
+                      ))}
+                    </span>
+                  )}
                   {canApproveReject && s.status === "SUBMITTED" && (
                     <span style={{ marginLeft: 8 }}>
                       <Button
+                        type="button"
                         variant="ghost"
                         style={{ padding: "2px 8px", fontSize: 12 }}
                         onClick={() => handleApprove(s.id)}
+                        disabled={submissionActionId !== null}
                       >
-                        Approve
+                        {submissionActionId === s.id ? "Approving…" : "Approve"}
                       </Button>
                       <Button
+                        type="button"
                         variant="danger"
                         style={{ padding: "2px 8px", fontSize: 12, marginLeft: 4 }}
                         onClick={() => handleReject(s.id)}
+                        disabled={submissionActionId !== null}
                       >
-                        Reject
+                        {submissionActionId === s.id ? "Rejecting…" : "Reject"}
                       </Button>
                     </span>
                   )}

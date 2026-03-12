@@ -56,6 +56,11 @@ export interface Task {
   submissions?: WorkSubmission[];
 }
 
+export interface SubmissionMediaItem {
+  mediaUrl: string;
+  mediaType: "IMAGE" | "VIDEO";
+}
+
 export interface WorkSubmission {
   id: string;
   description: string;
@@ -66,6 +71,7 @@ export interface WorkSubmission {
   createdAt: string;
   submittedBy?: Pick<User, "id" | "name" | "email">;
   task?: { title: string };
+  media?: SubmissionMediaItem[];
 }
 
 export interface Comment {

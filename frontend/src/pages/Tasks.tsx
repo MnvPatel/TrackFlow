@@ -1,18 +1,11 @@
-import React, { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../lib/axios";
 import type { Task } from "../types";
 import Card from "../components/Card";
 import Button from "../components/Button";
+import TaskCard from "../components/TaskCard";
 import { useAuth } from "../context/AuthContext";
-
-const statusColors: Record<string, string> = {
-  PENDING: "var(--text-muted)",
-  IN_PROGRESS: "var(--accent)",
-  SUBMITTED: "var(--warning)",
-  APPROVED: "var(--success)",
-  REJECTED: "var(--danger)",
-};
 
 export default function Tasks() {
   const { role } = useAuth();
@@ -45,20 +38,13 @@ export default function Tasks() {
           <Card>No tasks yet.</Card>
         ) : (
           list.map((t) => (
-            <Link key={t.id} to={`/tasks/${t.id}`} style={{ textDecoration: "none", color: "inherit" }}>
-              <Card style={{ display: "flex", alignItems: "center", justifyContent: "space-between", cursor: "pointer" }}>
-                <div>
-                  <div style={{ fontWeight: 600, marginBottom: 4 }}>{t.title}</div>
-                  <div style={{ fontSize: 14, color: "var(--text-secondary)" }}>
-                    {t.project?.title ?? "—"} · {t.priority} ·{" "}
-                    <span style={{ color: statusColors[t.status] ?? "var(--text-muted)" }}>{t.status}</span>
-                  </div>
-                </div>
-                <span style={{ fontSize: 14, color: "var(--text-muted)" }}>
-                  {t.assignments?.length ?? 0} assignees
-                </span>
-              </Card>
-            </Link>
+            <TaskCard
+              key={t.id}
+              task={t}
+              showProject={true}
+              showPercent={true}
+              showAssignees={true}
+            />
           ))
         )}
       </div>

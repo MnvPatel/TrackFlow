@@ -17,6 +17,7 @@ import Submissions from "./pages/Submissions";
 import Issues from "./pages/Issues";
 import IssueNew from "./pages/IssueNew";
 import IssueDetail from "./pages/IssueDetail";
+import IssueConvertToTask from "./pages/IssueConvertToTask";
 import Notifications from "./pages/Notifications";
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
@@ -50,6 +51,7 @@ function AppRoutes() {
         <Route path="issues" element={<Issues />} />
         <Route path="issues/new" element={<IssueNew />} />
         <Route path="issues/:issueId" element={<IssueDetail />} />
+        <Route path="issues/:issueId/convert" element={<IssueConvertToTask />} />
         <Route path="notifications" element={<Notifications />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
