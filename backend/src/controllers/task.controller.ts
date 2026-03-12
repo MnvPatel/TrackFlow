@@ -47,13 +47,21 @@ export const createTask = async (req: any, res: Response) => {
       });
     }
 
+    const deadlineDate =
+      deadline != null && String(deadline).trim() !== ""
+        ? new Date(deadline as string)
+        : undefined;
+    if (deadlineDate !== undefined && isNaN(deadlineDate.getTime())) {
+      return res.status(400).json({ message: "Invalid deadline" });
+    }
+
     // 3. Create task with assignments
     const task = await prisma.task.create({
       data: {
         title,
         description,
         priority,
-        deadline,
+        ...(deadlineDate !== undefined && { deadline: deadlineDate }),
         projectId,
         createdById: req.user.id,
         assignments: {
@@ -143,6 +151,9 @@ export const getTasks = async (req: any, res: Response) => {
       status: true,
       priority: true,
       deadline: true,
+      percentCompleted: true,
+      createdAt: true,
+      projectId: true,
 
       project: {
         select: {
@@ -153,6 +164,8 @@ export const getTasks = async (req: any, res: Response) => {
 
       assignments: {
         select: {
+          id: true,
+          userId: true,
           user: {
             select: {
               id: true,
@@ -168,6 +181,73 @@ export const getTasks = async (req: any, res: Response) => {
   await setCache(cacheKey, tasks, 300);
 
   res.json(tasks);
+};
+
+//GET TASKS FOR A SPECIFIC PROJECT (no cache, always fresh)
+export const getProjectTasks = async (req: any, res: Response) => {
+  const { projectId } = req.params as { projectId: string };
+  const { id, role } = req.user;
+
+  const project = await prisma.project.findUnique({
+    where: { id: projectId },
+    include: { members: true },
+  });
+
+  if (!project) {
+    return res.status(404).json({ message: "Project not found" });
+  }
+
+  // RBAC:
+  // - ADMIN: can see all project tasks
+  // - CLIENT: only for their own projects
+  // - EMPLOYEE: only if they are a member of the project
+  if (role === "CLIENT" && project.clientId !== id) {
+    return res.sendStatus(403);
+  }
+
+  if (
+    role === "EMPLOYEE" &&
+    !project.members.some((m) => m.userId === id)
+  ) {
+    return res.sendStatus(403);
+  }
+
+  const tasks = await prisma.task.findMany({
+    where: { projectId },
+    select: {
+      id: true,
+      title: true,
+      description: true,
+      status: true,
+      priority: true,
+      deadline: true,
+      percentCompleted: true,
+      createdAt: true,
+      projectId: true,
+      project: {
+        select: {
+          id: true,
+          title: true,
+        },
+      },
+      assignments: {
+        select: {
+          id: true,
+          userId: true,
+          user: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+            },
+          },
+        },
+      },
+    },
+    orderBy: { createdAt: "desc" },
+  });
+
+  return res.json(tasks);
 };
 
 //GET TASK BY ID
@@ -191,7 +271,7 @@ export const getTaskById = async (req: any, res: Response) => {
       status: true,
       priority: true,
       deadline: true,
-
+      percentCompleted: true,
       project: {
         select: {
           id: true,
@@ -237,10 +317,11 @@ export const getTaskById = async (req: any, res: Response) => {
   res.json(task);
 };
 
-//ADMIN: Update Task Status
+//ADMIN: Update Task Status; EMPLOYEE: may set assigned task from PENDING to IN_PROGRESS only
 export const updateTaskStatus = async (req: any, res: Response) => {
   const taskId = req.params.taskId as string;
   const { status } = req.body;
+  const { id: userId, role } = req.user;
 
   if (!Object.values(TaskStatus).includes(status)) {
     return res.status(400).json({ message: "Invalid task status" });
@@ -256,6 +337,18 @@ export const updateTaskStatus = async (req: any, res: Response) => {
 
   if (!task) {
     return res.status(404).json({ message: "Task not found" });
+  }
+
+  if (role === "EMPLOYEE") {
+    const isAssigned = task.assignments.some((a) => a.userId === userId);
+    if (!isAssigned) {
+      return res.status(403).json({ message: "You are not assigned to this task" });
+    }
+    if (task.status !== "PENDING" || status !== "IN_PROGRESS") {
+      return res.status(403).json({
+        message: "As an employee you can only start a task (set status to IN_PROGRESS when it is PENDING)",
+      });
+    }
   }
 
   const updated = await prisma.task.update({
