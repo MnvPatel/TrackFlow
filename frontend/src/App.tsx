@@ -12,6 +12,7 @@ import ProjectEdit from "./pages/ProjectEdit";
 import Tasks from "./pages/Tasks";
 import TaskNew from "./pages/TaskNew";
 import TaskDetail from "./pages/TaskDetail";
+import TaskEdit from "./pages/TaskEdit";
 import Employees from "./pages/Employees";
 import Submissions from "./pages/Submissions";
 import Issues from "./pages/Issues";
@@ -46,6 +47,7 @@ function AppRoutes() {
         <Route path="tasks" element={<Tasks />} />
         <Route path="tasks/new" element={<TaskNew />} />
         <Route path="tasks/:taskId" element={<TaskDetail />} />
+        <Route path="tasks/:taskId/edit" element={<TaskEdit />} />
         <Route path="employees" element={<Employees />} />
         <Route path="submissions" element={<Submissions />} />
         <Route path="issues" element={<Issues />} />

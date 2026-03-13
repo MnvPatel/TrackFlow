@@ -254,14 +254,6 @@ export const getProjectTasks = async (req: any, res: Response) => {
 export const getTaskById = async (req: any, res: Response) => {
   const { taskId } = req.params;
   const { id, role } = req.user;
-
-  const cacheKey = `task:${taskId}:${role}:${id}`;
-
-  const cached = await getCache(cacheKey);
-  if (cached) {
-    return res.json(cached);
-  }
-
   const task = await prisma.task.findUnique({
     where: { id: taskId },
     select: {
@@ -272,6 +264,7 @@ export const getTaskById = async (req: any, res: Response) => {
       priority: true,
       deadline: true,
       percentCompleted: true,
+      projectId: true,
       project: {
         select: {
           id: true,
@@ -312,8 +305,6 @@ export const getTaskById = async (req: any, res: Response) => {
     return res.sendStatus(403);
   }
 
-  await setCache(cacheKey, task, 300);
-  
   res.json(task);
 };
 
@@ -415,12 +406,23 @@ const allowedTransitions: Record<string, string[]> = {
 
 export const editTask = async (req: any, res: Response) => {
   const taskId = req.params.taskId as string;
-  const { title, description, priority, deadline, status } = req.body;
+  const { title, description, priority, deadline, status, assigneeIds } = req.body as {
+    title?: string;
+    description?: string;
+    priority?: "LOW" | "MEDIUM" | "HIGH";
+    deadline?: string;
+    status?: TaskStatus;
+    assigneeIds?: string[];
+  };
 
   const task = await prisma.task.findUnique({
     where: { id: taskId },
     include: {
-      project: true,
+      project: {
+        include: {
+          members: true,
+        },
+      },
       assignments: true,
     },
   });
@@ -450,32 +452,97 @@ export const editTask = async (req: any, res: Response) => {
     });
   }
 
-  const updated = await prisma.task.update({
-    where: { id: taskId },
-    data: {
-      title,
-      description,
-      priority,
-      deadline,
-      status,
-    },
+  // Prepare new assigneeIds (if provided), constrained to project members
+  let newAssigneeIds: string[] | null = null;
+  if (Array.isArray(assigneeIds)) {
+    // Normalize and remove any empty / invalid values
+    newAssigneeIds = [
+      ...new Set(
+        assigneeIds
+          .filter((id) => typeof id === "string" && id.trim() !== "")
+          .map((id) => id.trim())
+      ),
+    ];
+
+    const projectMemberIds = task.project.members.map((m) => m.userId);
+    const invalidAssignees = newAssigneeIds.filter(
+      (id) => !projectMemberIds.includes(id)
+    );
+
+    if (invalidAssignees.length > 0) {
+      return res.status(400).json({
+        message: "Some assignees are not part of the project team",
+      });
+    }
+  }
+
+  // Parse optional deadline
+  let deadlineDate: Date | undefined;
+  if (deadline != null && String(deadline).trim() !== "") {
+    const d = new Date(deadline as string);
+    if (isNaN(d.getTime())) {
+      return res.status(400).json({ message: "Invalid deadline" });
+    }
+    deadlineDate = d;
+  }
+
+  const updated = await prisma.$transaction(async (tx) => {
+    // Update scalar fields
+    const updatedTask = await tx.task.update({
+      where: { id: taskId },
+      data: {
+        title,
+        description,
+        priority,
+        ...(deadlineDate !== undefined && { deadline: deadlineDate }),
+        status,
+      },
+    });
+
+    if (newAssigneeIds !== null) {
+      // Remove assignments no longer selected
+      await tx.taskAssignment.deleteMany({
+        where: {
+          taskId,
+          userId: { notIn: newAssigneeIds },
+        },
+      });
+
+      // Add any new assignees that are not already assigned
+      const existingAssignments = await tx.taskAssignment.findMany({
+        where: { taskId },
+        select: { userId: true },
+      });
+      const existingIds = new Set(existingAssignments.map((a) => a.userId));
+      const toCreate = newAssigneeIds.filter((id) => !existingIds.has(id));
+      if (toCreate.length > 0) {
+        await tx.taskAssignment.createMany({
+          data: toCreate.map((userId) => ({ taskId, userId })),
+        });
+      }
+    }
+
+    return updatedTask;
   });
 
-  const assignedUserIds = task!.assignments.map(a => a.userId);
+  const oldAssignedUserIds = task!.assignments.map(a => a.userId);
+  const finalAssigneeIds =
+    newAssigneeIds !== null ? newAssigneeIds : oldAssignedUserIds;
+  const allAssigneeIds = [...new Set([...oldAssignedUserIds, ...finalAssigneeIds])];
 
   //CACHE INVALIDATION
   await deleteCache([
     "tasks:ADMIN",
     `tasks:CLIENT:${task!.project.clientId}`,
-    ...assignedUserIds.map(id => `tasks:EMPLOYEE:${id}`),
+    ...allAssigneeIds.map(id => `tasks:EMPLOYEE:${id}`),
 
     `task:${taskId}:ADMIN`,
     `task:${taskId}:CLIENT:${task!.project.clientId}`,
-    ...assignedUserIds.map(id => `task:${taskId}:EMPLOYEE:${id}`),
+    ...allAssigneeIds.map(id => `task:${taskId}:EMPLOYEE:${id}`),
 
     `project:${task!.projectId}:ADMIN`,
     `project:${task!.projectId}:CLIENT:${task!.project.clientId}`,
-    ...assignedUserIds.map(id => `project:${task!.projectId}:EMPLOYEE:${id}`)
+    ...allAssigneeIds.map(id => `project:${task!.projectId}:EMPLOYEE:${id}`)
   ]);
 
   const admins = await prisma.user.findMany({
@@ -485,7 +552,7 @@ export const editTask = async (req: any, res: Response) => {
 
   let participantIds = [
     task.project.clientId,
-    ...assignedUserIds,
+    ...finalAssigneeIds,
     ...admins.map(a => a.id),
   ];
 

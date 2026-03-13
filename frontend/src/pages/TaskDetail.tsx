@@ -237,6 +237,14 @@ export default function TaskDetail() {
                 </select>
               </div>
               <Button
+                type="button"
+                variant="secondary"
+                onClick={() => navigate(`/tasks/${task.id}/edit`)}
+                style={{ width: "100%" }}
+              >
+                Edit task
+              </Button>
+              <Button
                 variant="danger"
                 onClick={handleDelete}
                 disabled={loading}

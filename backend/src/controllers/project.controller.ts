@@ -361,10 +361,17 @@ export const updateProjectStatus = async (req: any, res: Response) => {
   });
 };
 
-//EDIT PROJECT
+//EDIT PROJECT (including team members)
 export const editProject = async (req: any, res: Response) => {
   const projectId = req.params.projectId as string;
-  const { title, description, startDate, endDate, status } = req.body;
+  const { title, description, startDate, endDate, status, teamMemberIds } = req.body as {
+    title?: string;
+    description?: string;
+    startDate?: string;
+    endDate?: string;
+    status?: ProjectStatus;
+    teamMemberIds?: string[];
+  };
 
   const project = await prisma.project.findUnique({
     where: { id: projectId },
@@ -389,31 +396,175 @@ export const editProject = async (req: any, res: Response) => {
     });
   }
 
-  const updated = await prisma.project.update({
-    where: { id: projectId },
-    data: {
-      title,
-      description,
-      startDate,
-      endDate,
-      status,
-    },
-  });
+  // Parse optional dates (same rules as createProject)
+  const start =
+    startDate != null && String(startDate).trim() !== ""
+      ? new Date(startDate as string | Date)
+      : undefined;
+  const end =
+    endDate != null && String(endDate).trim() !== ""
+      ? new Date(endDate as string | Date)
+      : undefined;
+
+  if (start !== undefined && isNaN(start.getTime())) {
+    return res.status(400).json({ message: "Invalid startDate" });
+  }
+  if (end !== undefined && isNaN(end.getTime())) {
+    return res.status(400).json({ message: "Invalid endDate" });
+  }
+  if (start !== undefined && end !== undefined && end < start) {
+    return res
+      .status(400)
+      .json({ message: "endDate must be after startDate" });
+  }
+
+  // Optional: update team members (employees) – same validation as createProject
+  let updatedProject = project;
+  if (Array.isArray(teamMemberIds)) {
+    // Normalize and remove any empty / null values
+    const uniqueTeamMemberIds: string[] = [
+      ...new Set(
+        teamMemberIds
+          .filter((id) => typeof id === "string" && id.trim() !== "")
+          .map((id) => id.trim())
+      ),
+    ];
+
+    if (uniqueTeamMemberIds.length > 0) {
+      const employees = await prisma.user.findMany({
+        where: {
+          id: { in: uniqueTeamMemberIds },
+          role: "EMPLOYEE",
+          isActive: true,
+        },
+      });
+
+      if (employees.length !== uniqueTeamMemberIds.length) {
+        return res.status(400).json({
+          message: "Invalid team members",
+        });
+      }
+    }
+
+    // Determine which users are being removed from the project team
+    const existingMemberIds = project.members.map((m) => m.userId);
+    const removedUserIds = existingMemberIds.filter(
+      (id) => !uniqueTeamMemberIds.includes(id)
+    );
+
+    // If any removed users have APPROVED submissions on tasks in this project, block removal
+    if (removedUserIds.length > 0) {
+      const blocking = await prisma.workSubmission.findFirst({
+        where: {
+          submittedById: { in: removedUserIds },
+          status: "APPROVED",
+          task: {
+            projectId,
+          },
+        },
+      });
+      if (blocking) {
+        return res.status(400).json({
+          message:
+            "Cannot remove team members who have approved work on this project",
+        });
+      }
+    }
+
+    // Replace project members to match new list
+    updatedProject = await prisma.$transaction(async (tx) => {
+      // Remove members no longer in the list
+      if (uniqueTeamMemberIds.length === 0) {
+        // If list is empty, remove all members
+        await tx.projectMember.deleteMany({
+          where: { projectId },
+        });
+      } else {
+        await tx.projectMember.deleteMany({
+          where: {
+            projectId,
+            userId: { notIn: uniqueTeamMemberIds },
+          },
+        });
+      }
+
+      // Add any new members that don't exist yet
+      const existingMembers = await tx.projectMember.findMany({
+        where: { projectId },
+        select: { userId: true },
+      });
+      const existingIds = new Set(existingMembers.map((m) => m.userId));
+
+      const toCreate = uniqueTeamMemberIds.filter((id) => !existingIds.has(id));
+      if (toCreate.length > 0) {
+        await tx.projectMember.createMany({
+          data: toCreate.map((userId) => ({ projectId, userId })),
+        });
+      }
+
+      // Also remove task assignments for users removed from the project (if any)
+      if (removedUserIds.length > 0) {
+        await tx.taskAssignment.deleteMany({
+          where: {
+            userId: { in: removedUserIds },
+            task: {
+              projectId,
+            },
+          },
+        });
+      }
+
+      // Update scalar fields on project
+      return tx.project.update({
+        where: { id: projectId },
+        data: {
+          title,
+          description,
+          ...(start !== undefined && { startDate: start }),
+          ...(end !== undefined && { endDate: end }),
+          status,
+        },
+        include: { members: true },
+      });
+    });
+  } else {
+    updatedProject = await prisma.project.update({
+      where: { id: projectId },
+      data: {
+        title,
+        description,
+        ...(start !== undefined && { startDate: start }),
+        ...(end !== undefined && { endDate: end }),
+        status,
+      },
+      include: { members: true },
+    });
+  }
 
   //CACHE INVALIDATION
+  const updatedMemberIds = updatedProject.members.map((m) => m.userId);
+  const previousMemberIds = project.members.map((m) => m.userId);
+  const removedUserIdsGlobal = previousMemberIds.filter(
+    (id) => !updatedMemberIds.includes(id)
+  );
+
   await deleteCache([
     "projects:ADMIN",
-    `projects:CLIENT:${project.clientId}`,
-    ...project.members.map(
-      (m) => `projects:EMPLOYEE:${m.userId}`
-    ),
+    `projects:CLIENT:${updatedProject.clientId}`,
+    ...updatedMemberIds.map((mId) => `projects:EMPLOYEE:${mId}`),
+    ...removedUserIdsGlobal.map((id) => `projects:EMPLOYEE:${id}`),
 
     `project:${projectId}:ADMIN`,
-    `project:${projectId}:CLIENT:${project.clientId}`,
-    ...project.members.map(
-      (m) =>
-        `project:${projectId}:EMPLOYEE:${m.userId}`
+    `project:${projectId}:CLIENT:${updatedProject.clientId}`,
+    ...updatedMemberIds.map(
+      (mId) => `project:${projectId}:EMPLOYEE:${mId}`
     ),
+    ...removedUserIdsGlobal.map(
+      (id) => `project:${projectId}:EMPLOYEE:${id}`
+    ),
+
+    // Also clear task caches for removed employees so their dashboards update
+    ...removedUserIdsGlobal.map((id) => `tasks:EMPLOYEE:${id}`),
   ]);
 
   const admins = await prisma.user.findMany({
@@ -421,10 +572,10 @@ export const editProject = async (req: any, res: Response) => {
     select: { id: true },
   });
 
-  const memberIds = project.members.map((m) => m.userId);
+  const memberIds = updatedProject.members.map((m) => m.userId);
   
   let participantIds = [
-    project.clientId,
+    updatedProject.clientId,
     ...memberIds,
     ...admins.map((a) => a.id),
   ];
@@ -441,7 +592,7 @@ export const editProject = async (req: any, res: Response) => {
     entityId: projectId,
   });
 
-  res.json(updated);
+  res.json(updatedProject);
 };
 
 //DELETE PROJECT

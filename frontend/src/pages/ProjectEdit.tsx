@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { api } from "../lib/axios";
-import type { Project } from "../types";
+import type { Project, User } from "../types";
 import Card from "../components/Card";
 import Button from "../components/Button";
 
@@ -9,28 +9,41 @@ export default function ProjectEdit() {
   const { projectId } = useParams<{ projectId: string }>();
   const navigate = useNavigate();
   const [project, setProject] = useState<Project | null>(null);
+  const [employees, setEmployees] = useState<User[]>([]);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [status, setStatus] = useState("");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
+  const [teamMemberIds, setTeamMemberIds] = useState<string[]>([]);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     if (!projectId) return;
-    api.get<Project>(`/api/projects/${projectId}`)
-      .then((res) => {
-        const p = res.data;
+    Promise.all([
+      api.get<Project>(`/api/projects/${projectId}`),
+      api.get<User[]>(`/api/admin/users?role=EMPLOYEE`),
+    ])
+      .then(([pRes, eRes]) => {
+        const p = pRes.data;
         setProject(p);
         setTitle(p.title);
         setDescription(p.description ?? "");
         setStatus(p.status);
         setStartDate(p.startDate ? p.startDate.slice(0, 10) : "");
         setEndDate(p.endDate ? p.endDate.slice(0, 10) : "");
+        setTeamMemberIds((p.members ?? []).map((m) => m.userId));
+        setEmployees(eRes.data);
       })
-      .catch((e) => setError(e instanceof Error ? e.message : "Failed"));
+      .catch((e) => setError(e instanceof Error ? e.message : "Failed to load project or users"));
   }, [projectId]);
+
+  const toggleMember = (id: string) => {
+    setTeamMemberIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
+    );
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -44,6 +57,7 @@ export default function ProjectEdit() {
         status: status || undefined,
         startDate: startDate || undefined,
         endDate: endDate || undefined,
+        teamMemberIds,
       });
       navigate(`/projects/${projectId}`);
     } catch (err) {
@@ -90,6 +104,39 @@ export default function ProjectEdit() {
             <option value="ON_HOLD">ON_HOLD</option>
             <option value="COMPLETED">COMPLETED</option>
           </select>
+          <label style={{ display: "block", marginBottom: 8, fontWeight: 500 }}>Team members</label>
+          <div
+            style={{
+              marginBottom: 16,
+              maxHeight: 160,
+              overflow: "auto",
+              border: "1px solid var(--border)",
+              borderRadius: 6,
+              padding: 8,
+            }}
+          >
+            {employees.length === 0 ? (
+              <p style={{ color: "var(--text-muted)", margin: 0 }}>
+                No employees found.
+              </p>
+            ) : (
+              employees.map((u) => (
+                <label
+                  key={u.id}
+                  style={{ display: "flex", alignItems: "center", gap: 8, padding: "4px 0" }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={teamMemberIds.includes(u.id)}
+                    onChange={() => toggleMember(u.id)}
+                  />
+                  <span>
+                    {u.name} ({u.email})
+                  </span>
+                </label>
+              ))
+            )}
+          </div>
           <label style={{ display: "block", marginBottom: 8, fontWeight: 500 }}>Start date</label>
           <input
             type="date"
