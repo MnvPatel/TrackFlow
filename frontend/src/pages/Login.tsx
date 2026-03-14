@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 import { api } from "../lib/axios";
 import { useAuth } from "../context/AuthContext";
 import Card from "../components/Card";
@@ -95,6 +95,12 @@ export default function Login() {
           </Button>
         </form>
         <p style={{ marginTop: 16, color: "var(--text-muted)", fontSize: 14 }}>
+          New employee?{" "}
+          <Link to="/set-password" style={{ color: "var(--accent)" }}>
+            Set your password
+          </Link>
+        </p>
+        <p style={{ marginTop: 8, color: "var(--text-muted)", fontSize: 14 }}>
           Use admin/employee/client credentials from your backend seed.
         </p>
         <p style={{ marginTop: 8, color: "var(--text-muted)", fontSize: 13 }}>

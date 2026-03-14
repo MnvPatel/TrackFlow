@@ -20,6 +20,7 @@ import IssueNew from "./pages/IssueNew";
 import IssueDetail from "./pages/IssueDetail";
 import IssueConvertToTask from "./pages/IssueConvertToTask";
 import Notifications from "./pages/Notifications";
+import SetPassword from "./pages/SetPassword";
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
   const { token } = useAuth();
@@ -31,6 +32,7 @@ function AppRoutes() {
   return (
     <Routes>
       <Route path="/login" element={<Login />} />
+      <Route path="/set-password" element={<SetPassword />} />
       <Route
         path="/"
         element={
