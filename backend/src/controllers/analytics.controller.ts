@@ -8,7 +8,10 @@ export const getAdminAnalytics = async (req: any, res: Response) => {
 
     const cached = await getCache(cacheKey);
     if (cached) {
-      return res.json(cached);
+      return res.json({
+        success: true,
+        analytics: cached
+      });
     }
 
     const [
