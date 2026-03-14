@@ -108,6 +108,11 @@ export const getProjectIssues = async (req: any, res: Response) => {
     const issues = await prisma.issue.findMany({
       where: { projectId },
       orderBy: { createdAt: "desc" },
+      include: {
+        createdBy: {
+          select: { id: true, name: true, email: true },
+        },
+      },
     });
 
     return res.json(issues);

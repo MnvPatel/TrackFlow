@@ -6,6 +6,7 @@ import Card from "../components/Card";
 import Button from "../components/Button";
 import CommentSection from "../components/CommentSection";
 import TaskCard from "../components/TaskCard";
+import IssueCard from "../components/IssueCard";
 import { useAuth } from "../context/AuthContext";
 
 const statusColors: Record<string, string> = {
@@ -167,6 +168,19 @@ export default function ProjectDetail() {
               <div style={{ marginTop: 4 }}>{project.percentCompleted}%</div>
             </div>
           </div>
+          {project.members != null && project.members.length > 0 && (
+            <div style={{ marginTop: 16 }}>
+              <div style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: 0.4, color: "var(--text-muted)", marginBottom: 4 }}>
+                Team members
+              </div>
+              <div style={{ fontSize: 14, color: "var(--text-secondary)" }}>
+                {project.members
+                  .map((m) => m.user?.name)
+                  .filter(Boolean)
+                  .join(", ") || "—"}
+              </div>
+            </div>
+          )}
           {project.description && (
             <div style={{ marginTop: 16 }}>
               <div style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: 0.4, color: "var(--text-muted)", marginBottom: 4 }}>
@@ -297,16 +311,11 @@ export default function ProjectDetail() {
           {loadingIssues ? (
             <p>Loading issues…</p>
           ) : issues.length > 0 ? (
-            <ul style={{ margin: 0, paddingLeft: 20 }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
               {issues.map((i) => (
-                <li key={i.id} style={{ marginBottom: 8 }}>
-                  <Link to={`/issues/${i.id}`}>{i.title}</Link>
-                  <span style={{ marginLeft: 8, color: "var(--text-muted)", fontSize: 14 }}>
-                    {i.status}
-                  </span>
-                </li>
+                <IssueCard key={i.id} issue={i} />
               ))}
-            </ul>
+            </div>
           ) : (
             <p style={{ color: "var(--text-muted)", margin: 0 }}>No issues for this project.</p>
           )}

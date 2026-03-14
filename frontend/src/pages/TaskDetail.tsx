@@ -5,6 +5,7 @@ import type { Task, WorkSubmission, Comment } from "../types";
 import Card from "../components/Card";
 import Button from "../components/Button";
 import CommentSection from "../components/CommentSection";
+import SubmissionCard from "../components/SubmissionCard";
 import { useAuth } from "../context/AuthContext";
 
 const statusColors: Record<string, string> = {
@@ -359,52 +360,25 @@ export default function TaskDetail() {
 
       {activeTab === "submissions" && (
         <Card style={{ marginBottom: 24 }}>
-          <h3 style={{ margin: "0 0 12px" }}>Submissions</h3>
+          <h2 style={{ margin: "0 0 16px", fontSize: "1.1rem" }}>Submissions</h2>
           {err && (
             <p style={{ color: "var(--danger)", marginBottom: 12, fontSize: 14 }}>{err}</p>
           )}
           {submissions.length === 0 ? (
             <p style={{ color: "var(--text-muted)", margin: 0 }}>No submissions yet.</p>
           ) : (
-            <ul style={{ margin: 0, paddingLeft: 20 }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
               {submissions.map((s) => (
-                <li key={s.id} style={{ marginBottom: 8 }}>
-                  {s.description} — {s.percentReported}% · {s.status} · by {s.submittedBy?.name ?? "—"}
-                  {s.media && s.media.length > 0 && (
-                    <span style={{ marginLeft: 8, fontSize: 12, color: "var(--text-muted)" }}>
-                      · {s.media.length} attachment(s):{" "}
-                      {s.media.map((m, i) => (
-                        <a key={i} href={m.mediaUrl} target="_blank" rel="noopener noreferrer" style={{ marginRight: 8 }}>
-                          {m.mediaType}
-                        </a>
-                      ))}
-                    </span>
-                  )}
-                  {canApproveReject && s.status === "SUBMITTED" && (
-                    <span style={{ marginLeft: 8 }}>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        style={{ padding: "2px 8px", fontSize: 12 }}
-                        onClick={() => handleApprove(s.id)}
-                        disabled={submissionActionId !== null}
-                      >
-                        {submissionActionId === s.id ? "Approving…" : "Approve"}
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="danger"
-                        style={{ padding: "2px 8px", fontSize: 12, marginLeft: 4 }}
-                        onClick={() => handleReject(s.id)}
-                        disabled={submissionActionId !== null}
-                      >
-                        {submissionActionId === s.id ? "Rejecting…" : "Reject"}
-                      </Button>
-                    </span>
-                  )}
-                </li>
+                <SubmissionCard
+                  key={s.id}
+                  submission={s}
+                  canApproveReject={canApproveReject}
+                  onApprove={handleApprove}
+                  onReject={handleReject}
+                  actionLoadingId={submissionActionId}
+                />
               ))}
-            </ul>
+            </div>
           )}
         </Card>
       )}
