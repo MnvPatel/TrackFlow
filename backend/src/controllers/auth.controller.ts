@@ -134,6 +134,21 @@ export const verifyPasswordSetup = async (req: Request, res: Response) => {
   res.json({ message: "Password set successfully" });
 };
 
+//GET CURRENT USER (PROFILE)
+export const getMe = async (req: any, res: Response) => {
+  try {
+    const user = await prisma.user.findUnique({
+      where: { id: req.user.id },
+      select: { id: true, name: true, email: true, role: true, avatarUrl: true },
+    });
+    if (!user) return res.status(404).json({ message: "User not found" });
+    res.json(user);
+  } catch (err) {
+    console.error("getMe error:", err);
+    res.status(500).json({ message: "Failed to fetch profile" });
+  }
+};
+
 //LOGOUT
 export const logout = async (req: any, res: Response) => {
   await prisma.user.update({

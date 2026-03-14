@@ -6,12 +6,14 @@ import {
   requestPasswordSetupOTP,
   verifyPasswordSetup,
   refreshAccessToken,
+  getMe,
   logout,
 } from "../controllers/auth.controller";
 import { auth } from "../middlewares/auth.middleware";
 
 const router = Router();
 
+router.get("/me", auth(["ADMIN", "EMPLOYEE", "CLIENT"]), getMe);
 router.post("/client/register", registerClient);
 router.post("/client/verify-otp", verifyClientOTP);
 router.post("/login", loginWithPassword);
