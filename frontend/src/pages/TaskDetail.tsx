@@ -264,11 +264,6 @@ export default function TaskDetail() {
               {updatingStatus ? "Starting…" : "Start task"}
             </Button>
           )}
-          {role !== "ADMIN" && !(role === "EMPLOYEE" && task.status === "PENDING") && (
-            <div style={{ fontSize: 13, color: "var(--text-muted)" }}>
-              Status changes are managed by admins.
-            </div>
-          )}
         </Card>
       </div>
 

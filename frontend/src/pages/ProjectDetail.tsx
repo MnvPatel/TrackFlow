@@ -191,61 +191,54 @@ export default function ProjectDetail() {
           )}
         </Card>
 
-        {/* Actions column */}
-        <Card
-          style={{
-            width: 260,
-            alignSelf: "stretch",
-            display: "flex",
-            flexDirection: "column",
-            gap: 12,
-          }}
-        >
-          {role === "ADMIN" && (
-            <>
-              <div>
-                <div style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: 0.4, color: "var(--text-muted)", marginBottom: 4 }}>
-                  Update status
-                </div>
-                <select
-                  value={project.status}
-                  onChange={(e) => handleStatusChange(e.target.value as Project["status"])}
-                  disabled={updatingStatus}
-                  style={{
-                    width: "100%",
-                    padding: "8px 10px",
-                    borderRadius: 6,
-                    border: "1px solid var(--border)",
-                    background: "var(--bg-secondary)",
-                    color: "var(--text-primary)",
-                  }}
-                >
-                  <option value="ACTIVE">ACTIVE</option>
-                  <option value="ON_HOLD">ON_HOLD</option>
-                  <option value="COMPLETED">COMPLETED</option>
-                </select>
+        {/* Actions column (admin only) */}
+        {role === "ADMIN" && (
+          <Card
+            style={{
+              width: 260,
+              alignSelf: "stretch",
+              display: "flex",
+              flexDirection: "column",
+              gap: 12,
+            }}
+          >
+            <div>
+              <div style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: 0.4, color: "var(--text-muted)", marginBottom: 4 }}>
+                Update status
               </div>
-              <Link to={`/projects/${projectId}/edit`}>
-                <Button variant="secondary" style={{ width: "100%" }}>
-                  Edit project
-                </Button>
-              </Link>
-              <Button
-                variant="danger"
-                onClick={handleDelete}
-                disabled={deleting}
-                style={{ width: "100%" }}
+              <select
+                value={project.status}
+                onChange={(e) => handleStatusChange(e.target.value as Project["status"])}
+                disabled={updatingStatus}
+                style={{
+                  width: "100%",
+                  padding: "8px 10px",
+                  borderRadius: 6,
+                  border: "1px solid var(--border)",
+                  background: "var(--bg-secondary)",
+                  color: "var(--text-primary)",
+                }}
               >
-                {deleting ? "Deleting…" : "Delete project"}
-              </Button>
-            </>
-          )}
-          {role !== "ADMIN" && (
-            <div style={{ fontSize: 13, color: "var(--text-muted)" }}>
-              Contact an admin to update project details.
+                <option value="ACTIVE">ACTIVE</option>
+                <option value="ON_HOLD">ON_HOLD</option>
+                <option value="COMPLETED">COMPLETED</option>
+              </select>
             </div>
-          )}
-        </Card>
+            <Link to={`/projects/${projectId}/edit`}>
+              <Button variant="secondary" style={{ width: "100%" }}>
+                Edit project
+              </Button>
+            </Link>
+            <Button
+              variant="danger"
+              onClick={handleDelete}
+              disabled={deleting}
+              style={{ width: "100%" }}
+            >
+              {deleting ? "Deleting…" : "Delete project"}
+            </Button>
+          </Card>
+        )}
       </div>
 
       {/* Tabs */}
